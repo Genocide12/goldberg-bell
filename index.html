@@ -4,12 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>Машина Голдберга — живая физика</title>
-<meta name="description" content="Настоящая машина Голдберга: стальной шар, буковые домино, стеклянный шарик, маятник и латунный колокол. Живая физика без видео и без ползунков.">
+<meta name="description" content="Настоящая машина Голдберга на физическом движке Rapier (Rust/WASM) и three.js: стальной шар, домино, стеклянный шарик, маятник-молот и латунный колокол.">
 <style>
 :root{
   --paper:#f0e9db; --ink:#3d3222; --dim:#8a7c62; --line:#d8cbb0;
   --wood:#b1793f; --wood-d:#8a5a2e; --err:#b3402e;
-  --mono:ui-monospace,"Cascadia Code",Consolas,monospace;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow:hidden}
@@ -18,7 +17,6 @@ body{background:var(--paper);color:var(--ink);
 #stage{position:relative;height:100%}
 canvas{display:block;width:100%;height:100%;cursor:grab;touch-action:none}
 canvas.drag{cursor:grabbing}
-canvas.hover{cursor:pointer}
 #top{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:14px;
   padding:12px 16px;pointer-events:none;
   background:linear-gradient(180deg,rgba(240,233,219,.92),rgba(240,233,219,0))}
@@ -35,8 +33,8 @@ button:active{filter:brightness(.96)}
 #btnRun:hover{background:var(--wood-d);border-color:var(--wood-d)}
 #btnSound.off{opacity:.45}
 #hud{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:space-between;
-  gap:10px;padding:10px 16px;pointer-events:none;font:12px var(--mono);color:var(--dim);
-  background:linear-gradient(0deg,rgba(240,233,219,.9),rgba(240,233,219,0))}
+  gap:10px;padding:10px 16px;pointer-events:none;font:12px ui-monospace,Consolas,monospace;
+  color:var(--dim);background:linear-gradient(0deg,rgba(240,233,219,.9),rgba(240,233,219,0))}
 #hudEvent{color:var(--wood-d);font-weight:700}
 #hudEvent.err{color:var(--err)}
 #hint{position:absolute;left:50%;bottom:44px;transform:translateX(-50%);
@@ -44,6 +42,13 @@ button:active{filter:brightness(.96)}
   border:1px solid var(--line);border-radius:20px;padding:7px 16px;
   pointer-events:none;white-space:nowrap;transition:opacity .6s}
 #hint.gone{opacity:0}
+#load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  flex-direction:column;gap:10px;background:var(--paper);z-index:5;transition:opacity .5s}
+#load.gone{opacity:0;pointer-events:none}
+#load .bar{width:180px;height:4px;border-radius:2px;background:var(--line);overflow:hidden}
+#load .bar i{display:block;height:100%;width:40%;border-radius:2px;background:var(--wood);
+  animation:slide 1s infinite}
+@keyframes slide{from{transform:translateX(-100%)}to{transform:translateX(450%)}}
 @media (max-width:640px){
   #top span{display:none}
   #hint{bottom:52px;max-width:92vw;white-space:normal;text-align:center}
@@ -52,10 +57,9 @@ button:active{filter:brightness(.96)}
 </head>
 <body>
 <div id="stage">
-  <canvas id="cv"></canvas>
   <div id="top">
     <h1>Машина Голдберга · <b>живая физика</b></h1>
-    <span>сталь · бук · стекло · латунь — настоящие размеры, массы и трение</span>
+    <span>сталь · бук · стекло · латунь — Rapier (Rust) + three.js</span>
     <div id="btns">
       <button id="btnRun" title="Сбросить и запустить опыт (Enter)">▶ Запуск</button>
       <button id="btnPause" title="Пауза / продолжить (Space)">⏸</button>
@@ -63,901 +67,254 @@ button:active{filter:brightness(.96)}
       <button id="btnSound" title="Звук">🔊</button>
     </div>
   </div>
-  <div id="hud"><span id="hudEvent">нажмите «Запуск»</span><span id="hudStats"></span></div>
-  <div id="hint">тела можно перетаскивать мышью · пустое место — вращение камеры · колесо — масштаб · Space — пауза</div>
+  <div id="hud"><span id="hudEvent">загрузка физдвижка…</span><span id="hudStats"></span></div>
+  <div id="hint">тела можно перетаскивать мышью · пустое место — вращение камеры · колесо — масштаб</div>
+  <div id="load"><div>загрузка физдвижка (Rapier, WASM)…</div><div class="bar"><i></i></div></div>
 </div>
+<script src="vendor/rapier_wasm.b64.js"></script>
+<script src="vendor/rapier.global.js"></script>
+<script src="vendor/three.core.global.js"></script>
+<script src="vendor/three.global.js"></script>
+<script src="vendor/orbit.global.js"></script>
+<script src="vendor/roomenv.global.js"></script>
 <script>
 "use strict";
-/* Машина Голдберга: натуральные предметы, реальная физика.
-   Планарная динамика (X-Z) на собственном движке твёрдых тел:
-   SAT-контакты, трение Кулона, шарниры к миру и между телами,
-   warm start, позиционная стабилизация, 240 Гц. Рендер — Canvas 2D.
-
-   Реальные предметы (плотности кг/м³: сталь 7850, бук 720,
-   стекло 2500, латунь 8500):
-   · стальной шар Ø50 мм — 0,51 кг (подшипник)
-   · 8 домино из бука 95×48×12 мм — по 39 г
-   · стеклянный шарик Ø40 мм — 84 г
-   · маятник: лопасть бука 120×60×20 мм + ручка — 117 г
-   · латунный колокол Ø95 мм (стенка) — 160 г, язычок Ø22 мм — 55 г */
-
-/* ---------- 2D-векторы в плоскости X-Z ---------- */
-const rot2 = (v, a) => ({ x: v.x * Math.cos(a) - v.z * Math.sin(a),
-                           z: v.x * Math.sin(a) + v.z * Math.cos(a) });
-const perp = v => ({ x: -v.z, z: v.x });
-const dot = (a, b) => a.x * b.x + a.z * b.z;
-const sub = (a, b) => ({ x: a.x - b.x, z: a.z - b.z });
-const add = (a, b) => ({ x: a.x + b.x, z: a.z + b.z });
-const mul = (a, s) => ({ x: a.x * s, z: a.z * s });
-const len = a => Math.hypot(a.x, a.z);
-const clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
-
-/* ---------- камера: орбита + перспектива ---------- */
-const cam = {
-  target: { x: 1.9, y: 0, z: 0.45 }, azim: -0.52, elev: 0.30, dist: 3.6,
-  fov: 39 * Math.PI / 180, eye: null, rgt: null, upv: null, fwd: null, f: 0,
-  update() {
-    const ce = Math.cos(this.elev), se = Math.sin(this.elev);
-    const ca = Math.cos(this.azim), sa = Math.sin(this.azim);
-    this.eye = { x: this.target.x + this.dist * ce * ca,
-                 y: this.target.y - this.dist * ce * sa,
-                 z: this.target.z + this.dist * se };
-    const f = { x: this.target.x - this.eye.x,
-                y: this.target.y - this.eye.y,
-                z: this.target.z - this.eye.z };
-    const fl = Math.hypot(f.x, f.y, f.z) || 1;
-    this.fwd = { x: f.x / fl, y: f.y / fl, z: f.z / fl };
-    // right = fwd × up(0,0,1)
-    const rx = this.fwd.y, ry = -this.fwd.x;
-    const rl = Math.hypot(rx, ry) || 1;
-    this.rgt = { x: rx / rl, y: ry / rl, z: 0 };
-    this.upv = { x: this.rgt.y * this.fwd.z, y: -this.rgt.x * this.fwd.z,
-                 z: this.rgt.x * this.fwd.y - this.rgt.y * this.fwd.x };
-  },
-  project(p) {
-    const d = { x: p.x - this.eye.x, y: p.y - this.eye.y, z: p.z - this.eye.z };
-    const cz = d.x * this.fwd.x + d.y * this.fwd.y + d.z * this.fwd.z;
-    if (cz < 0.05) return null;
-    const cx = d.x * this.rgt.x + d.y * this.rgt.y;
-    const cy = d.x * this.upv.x + d.y * this.upv.y + d.z * this.upv.z;
-    return { x: cv.width / 2 + cx * this.f / cz,
-             y: cv.height / 2 - cy * this.f / cz, d: cz };
-  }
-};
-const sub3 = (a, b) => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z });
-
-const cv = document.getElementById("cv");
-const ctx = cv.getContext("2d");
-function resize() {
-  const r = cv.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
-  cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
-  cam.f = cv.height / (2 * Math.tan(cam.fov / 2)) * 1.18;
-  draw();
-}
-addEventListener("resize", resize);
-
-/* ---------- свет: со стороны камеры (камера на +Y), чуть слева и сверху ---------- */
-const LIGHT = (() => { const v = { x: -0.35, y: 0.55, z: 0.76 };
-  const l = Math.hypot(v.x, v.y, v.z); return { x: v.x / l, y: v.y / l, z: v.z / l }; })();
-
-/* ============ ФИЗИЧЕСКИЙ ДВИЖОК ============ */
-const bodies = [], joints = [];
-/* шарниры: {body, ax, az, wx, wz} — к миру; {a, b, ax, az, bx, bz} — между телами */
-
-function recomputeMass(b) {
-  if (b.isStatic) { b.invMass = 0; b.invI = 0; return; }
-  let area = 0;
-  for (const s of b.shapes)
-    area += s.c === 1 ? Math.PI * s.r * s.r : 4 * s.hw * s.hh;
-  let I = 0;
-  for (const s of b.shapes) {
-    const m = b.mass * (s.c === 1 ? Math.PI * s.r * s.r : 4 * s.hw * s.hh) / area;
-    const d2 = (s.ox || 0) ** 2 + (s.oz || 0) ** 2;
-    I += m * (d2 + (s.c === 1 ? s.r * s.r / 2 : (s.hw * s.hw + s.hh * s.hh) / 3));
-  }
-  b.invMass = 1 / b.mass;
-  b.invI = I > 1e-9 ? 1 / I : 0;
-}
-function makeBody(cfg) {
-  const b = {
-    name: cfg.name, kind: cfg.kind || cfg.name,
-    pos: { x: cfg.x, z: cfg.z }, angle: cfg.angle || 0,
-    vel: { x: 0, z: 0 }, angVel: 0,
-    mass: cfg.mass || 1, shapes: cfg.shapes || [],
-    friction: cfg.friction ?? 0.5, restitution: cfg.restitution ?? 0,
-    ldamp: cfg.ldamp ?? 0.02, adamp: cfg.adamp ?? 0.02,
-    isStatic: !!cfg.static, grabbed: null, hover: false,
-    dep: cfg.dep ?? 0.12,             // глубина по Y (для рендера)
-    home: { x: cfg.x, z: cfg.z, angle: cfg.angle || 0 },
-  };
-  recomputeMass(b);
-  bodies.push(b);
-  if (cfg.pivot) {  // шарнир к миру: якорь фиксируется в текущей позе
-    const a = rot2({ x: cfg.pivot[0], z: cfg.pivot[1] }, b.angle);
-    joints.push({ body: b, ax: cfg.pivot[0], az: cfg.pivot[1],
-      wx: b.pos.x + a.x, wz: b.pos.z + a.z });
-  }
-  return b;
-}
-function pairJoint(a, la, b, lb) {  // шарнир между телами (общая точка)
-  joints.push({ a, b, ax: la[0], az: la[1], bx: lb[0], bz: lb[1] });
-}
-
-function shapeWorld(b, s) {
-  const c = add(b.pos, rot2({ x: s.ox || 0, z: s.oz || 0 }, b.angle));
-  if (s.c === 1) return { c, r: s.r };
-  const a = b.angle + (s.ra || 0);
-  return { c, hw: s.hw, hh: s.hh, a,
-    ux: { x: Math.cos(a), z: Math.sin(a) },
-    uz: { x: -Math.sin(a), z: Math.cos(a) } };
-}
-function bodyAABB(b, pad) {
-  let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
-  for (const s of b.shapes) {
-    if (s.c === 1) {
-      const c = add(b.pos, rot2({ x: s.ox || 0, z: s.oz || 0 }, b.angle));
-      x0 = Math.min(x0, c.x - s.r); x1 = Math.max(x1, c.x + s.r);
-      z0 = Math.min(z0, c.z - s.r); z1 = Math.max(z1, c.z + s.r);
-    } else {
-      const g = shapeWorld(b, s);
-      for (const [i, j] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
-        const p = add(g.c, add(mul(g.ux, i * g.hw), mul(g.uz, j * g.hh)));
-        x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x);
-        z0 = Math.min(z0, p.z); z1 = Math.max(z1, p.z);
-      }
-    }
-  }
-  return { x0: x0 - pad, x1: x1 + pad, z0: z0 - pad, z1: z1 + pad };
-}
-
-const contacts = [];
-function collide() {
-  contacts.length = 0;
-  const pad = 0.02;
-  const bb = bodies.map(b => bodyAABB(b, pad));
-  for (let i = 0; i < bodies.length; i++) for (let j = i + 1; j < bodies.length; j++) {
-    const A = bodies[i], B = bodies[j];
-    if ((A.isStatic || A.invMass === 0) && (B.isStatic || B.invMass === 0)) continue;
-    const a = bb[i], b = bb[j];
-    if (a.x1 < b.x0 || b.x1 < a.x0 || a.z1 < b.z0 || b.z1 < a.z0) continue;
-    for (const sa of A.shapes) for (const sb of B.shapes) {
-      const ga = shapeWorld(A, sa), gb = shapeWorld(B, sb);
-      if (sa.c === 1 && sb.c === 1) circleCircle(A, ga, B, gb);
-      else if (sa.c === 1) circleBox(A, ga, B, gb, true);
-      else if (sb.c === 1) circleBox(B, gb, A, ga, false);
-      else boxBox(A, ga, B, gb);
-    }
-  }
-}
-function pushContact(A, B, n, pts, vn0) {
-  contacts.push({ a: A, b: B, n, pts, vn0,
-    e: Math.max(A.restitution, B.restitution),
-    mu: Math.sqrt(A.friction * B.friction) });
-}
-function relVelN(A, B, p, n) {
-  const ra = sub(p, A.pos), rb = sub(p, B.pos);
-  const v = { x: B.vel.x - B.angVel * rb.z - A.vel.x + A.angVel * ra.z,
-              z: B.vel.z + B.angVel * rb.x - A.vel.z - A.angVel * ra.x };
-  return dot(v, n);
-}
-function circleCircle(A, ga, B, gb) {
-  const d = sub(gb.c, ga.c), ds = len(d); if (ds > ga.r + gb.r || ds === 0) return;
-  const n = { x: d.x / ds, z: d.z / ds };
-  pushContact(A, B, n,
-    [{ x: ga.c.x + n.x * ga.r, z: ga.c.z + n.z * ga.r, sep: ds - ga.r - gb.r }],
-    relVelN(A, B, ga.c, n));
-}
-function circleBox(C, gc, B, gb, cIsA) {
-  const d = sub(gc.c, gb.c);
-  const lx = dot(d, gb.ux), lz = dot(d, gb.uz);
-  const qx = clamp(lx, -gb.hw, gb.hw), qz = clamp(lz, -gb.hh, gb.hh);
-  const p = add(gb.c, add(mul(gb.ux, qx), mul(gb.uz, qz)));
-  const dd = sub(gc.c, p), ds = len(dd);
-  let n, sep;
-  if (ds === 0) {
-    const ex = gb.hw - Math.abs(lx), ez = gb.hh - Math.abs(lz);
-    if (ex < ez) { n = mul(gb.ux, Math.sign(lx) || 1); sep = -(ex + gc.r); }
-    else { n = mul(gb.uz, Math.sign(lz) || 1); sep = -(ez + gc.r); }
-  } else if (ds < gc.r) { n = { x: dd.x / ds, z: dd.z / ds }; sep = ds - gc.r; }
-  else return;
-  if (cIsA) { const nn = { x: -n.x, z: -n.z };
-    pushContact(C, B, nn, [{ x: p.x, z: p.z, sep }], relVelN(C, B, p, nn)); }
-  else pushContact(B, C, n, [{ x: p.x, z: p.z, sep }], relVelN(B, C, p, n));
-}
-function boxBox(A, ga, B, gb) {
-  const d = sub(gb.c, ga.c);
-  const axes = [[ga.ux, ga.hw, 0], [ga.uz, ga.hh, 0],
-                 [gb.ux, gb.hw, 1], [gb.uz, gb.hh, 1]];
-  let best = null;
-  for (const [u, off, own] of axes) {
-    let n = { x: u.x, z: u.z };
-    if (dot(d, n) < 0) n = { x: -n.x, z: -n.z };
-    const other = own ? ga : gb;
-    const r = Math.abs(dot(other.ux, n)) * other.hw + Math.abs(dot(other.uz, n)) * other.hh;
-    const s = Math.abs(dot(d, n));
-    const sep = s - (off + r);
-    if (sep > 0.0006) return;
-    if (!best || sep > best.sep) best = { n, sep, own };
-  }
-  const ref = best.own ? gb : ga, inc = best.own ? ga : gb;
-  const n = best.n;
-  const ln = rot2(n, -ref.a);
-  let r1, r2, refU, refHalf;
-  if (Math.abs(ln.x) > Math.abs(ln.z)) {
-    const s = Math.sign(ln.x);
-    r1 = add(ref.c, add(mul(ref.ux, s * ref.hw), mul(ref.uz, -ref.hh)));
-    r2 = add(ref.c, add(mul(ref.ux, s * ref.hw), mul(ref.uz, ref.hh)));
-    refU = ref.uz; refHalf = ref.hh;
-  } else {
-    const s = Math.sign(ln.z);
-    r1 = add(ref.c, add(mul(ref.ux, -ref.hw), mul(ref.uz, s * ref.hh)));
-    r2 = add(ref.c, add(mul(ref.ux, ref.hw), mul(ref.uz, s * ref.hh)));
-    refU = ref.ux; refHalf = ref.hw;
-  }
-  const li = rot2({ x: -n.x, z: -n.z }, -inc.a);
-  let i1, i2;
-  if (Math.abs(li.x) > Math.abs(li.z)) {
-    const s = Math.sign(li.x);
-    i1 = add(inc.c, add(mul(inc.ux, s * inc.hw), mul(inc.uz, -inc.hh)));
-    i2 = add(inc.c, add(mul(inc.ux, s * inc.hw), mul(inc.uz, inc.hh)));
-  } else {
-    const s = Math.sign(li.z);
-    i1 = add(inc.c, add(mul(inc.ux, -inc.hw), mul(inc.uz, s * inc.hh)));
-    i2 = add(inc.c, add(mul(inc.ux, inc.hw), mul(inc.uz, s * inc.hh)));
-  }
-  let P = [i1, i2];
-  for (const sgn of [-1, 1]) {
-    const t1 = dot(sub(P[0], ref.c), refU) * sgn;
-    const t2 = dot(sub(P[1], ref.c), refU) * sgn;
-    const Q = [];
-    if (t1 <= refHalf) Q.push(P[0]);
-    if ((t1 <= refHalf) !== (t2 <= refHalf)) {
-      const f = (refHalf - t1) / (t2 - t1);
-      Q.push(add(P[0], mul(sub(P[1], P[0]), f)));
-    }
-    if (t2 <= refHalf) Q.push(P[1]);
-    if (Q.length < 2) return;
-    P = Q;
-  }
-  const pts = [];
-  for (const q of P) {
-    const s2 = dot(sub(q, r1), n);
-    if (s2 <= 0.0005) pts.push({ x: q.x, z: q.z, sep: s2 });
-  }
-  if (!pts.length) return;
-  pushContact(A, B, n, pts, relVelN(A, B, P[0], n));
-}
-
-/* --- солвер: warm start + возраст контакта; шарниры к миру и парные --- */
-const ITER = 12;
-const prevContacts = new Map();
-const pairKey = (c, p, i) => c.a.name + "|" + c.b.name + "|" + i;
-function solve(dt) {
-  for (const c of contacts) c.pts.forEach((p, i) => {
-    const old = prevContacts.get(pairKey(c, p, i));
-    p.age = old ? old.age + 1 : 0;
-    // после удара (большое |vn0|) старый импульс не тянем — контакт «свежий»
-    const impact = Math.abs(c.vn0) > 0.3;
-    p.jn = old && !impact ? old.jn : 0;
-    p.jf = old && !impact ? old.jf : 0;
-  });
-  for (let it = 0; it < ITER; it++) {
-    for (const c of contacts) {
-      const A = c.a, B = c.b, n = c.n;
-      for (const p of c.pts) {
-        const ra = sub(p, A.pos), rb = sub(p, B.pos);
-        const vB = { x: B.vel.x - B.angVel * rb.z, z: B.vel.z + B.angVel * rb.x };
-        const vA = { x: A.vel.x - A.angVel * ra.z, z: A.vel.z + A.angVel * ra.x };
-        const vn = (vB.x - vA.x) * n.x + (vB.z - vA.z) * n.z;
-        const bias = Math.min(0.2 / dt * Math.max(-p.sep - 0.0008, 0), 0.3);
-        const rest = (p.age < 2) ? c.e * Math.max(0, -(c.vn0 + 0.05)) * 0.9 : 0;
-        let k = A.invMass + A.invI * (perp(ra).x * n.x + perp(ra).z * n.z) ** 2
-              + B.invMass + B.invI * (perp(rb).x * n.x + perp(rb).z * n.z) ** 2;
-        if (k < 1e-9) continue;
-        const jOld = p.jn;
-        let j = jOld + (rest + bias - vn) / k;
-        if (j < 0) j = 0;
-        const dj = j - jOld; p.jn = j;
-        A.vel.x -= dj * n.x * A.invMass; A.vel.z -= dj * n.z * A.invMass;
-        A.angVel -= A.invI * (perp(ra).x * n.x + perp(ra).z * n.z) * dj;
-        B.vel.x += dj * n.x * B.invMass; B.vel.z += dj * n.z * B.invMass;
-        B.angVel += B.invI * (perp(rb).x * n.x + perp(rb).z * n.z) * dj;
-        const t = { x: -n.z, z: n.x };
-        const vt = (vB.x - vA.x) * t.x + (vB.z - vA.z) * t.z;
-        let kf = A.invMass + A.invI * (perp(ra).x * t.x + perp(ra).z * t.z) ** 2
-              + B.invMass + B.invI * (perp(rb).x * t.x + perp(rb).z * t.z) ** 2;
-        if (kf < 1e-9) { p.jf = 0; continue; }
-        const fOld = p.jf;
-        let f = fOld - vt / kf;
-        const fmax = c.mu * p.jn;
-        f = clamp(f, -fmax, fmax);
-        const df = f - fOld; p.jf = f;
-        A.vel.x -= df * t.x * A.invMass; A.vel.z -= df * t.z * A.invMass;
-        A.angVel -= A.invI * (perp(ra).x * t.x + perp(ra).z * t.z) * df;
-        B.vel.x += df * t.x * B.invMass; B.vel.z += df * t.z * B.invMass;
-        B.angVel += B.invI * (perp(rb).x * t.x + perp(rb).z * t.z) * df;
-      }
-    }
-    for (const j of joints) {
-      let bA, aAx, aAz, bB, bBx, bBz, imA, imB, iiA, iiB;
-      if (j.body) {  // к миру: точка тела в (wx, wz)
-        bA = j.body; aAx = j.ax; aAz = j.az;
-        const a = rot2({ x: j.ax, z: j.az }, bA.angle);
-        j.px = bA.pos.x + a.x; j.pz = bA.pos.z + a.z;
-        j.qx = j.wx; j.qz = j.wz;
-        imA = bA.invMass; iiA = bA.invI; imB = 0; iiB = 0;
-      } else {      // между телами
-        bA = j.a; bB = j.b;
-        const a = rot2({ x: j.ax, z: j.az }, bA.angle);
-        const b = rot2({ x: j.bx, z: j.bz }, bB.angle);
-        j.px = bA.pos.x + a.x; j.pz = bA.pos.z + a.z;
-        j.qx = bB.pos.x + b.x; j.qz = bB.pos.z + b.z;
-        imA = bA.invMass; iiA = bA.invI; imB = bB.invMass; iiB = bB.invI;
-      }
-      const rAx = j.px - bA.pos.x, rAz = j.pz - bA.pos.z;
-      const rBx = j.qx - (bB ? bB.pos.x : 0), rBz = j.qz - (bB ? bB.pos.z : 0);
-      const ex = j.px - j.qx, ez = j.pz - j.qz;
-      for (const e of [{ x: 1, z: 0 }, { x: 0, z: 1 }]) {
-        const vA = { x: bA.vel.x - bA.angVel * rAz, z: bA.vel.z + bA.angVel * rAx };
-        const va = vA.x * e.x + vA.z * e.z;
-        let vb = 0, jEB = 0;
-        if (bB) {
-          const vB = { x: bB.vel.x - bB.angVel * rBz, z: bB.vel.z + bB.angVel * rBx };
-          vb = vB.x * e.x + vB.z * e.z;
-        }
-        const bias = 0.12 / dt * (ex * e.x + ez * e.z);
-        const jEA = perp({ x: rAx, z: rAz }).x * e.x + perp({ x: rAx, z: rAz }).z * e.z;
-        if (bB) jEB = perp({ x: rBx, z: rBz }).x * e.x + perp({ x: rBx, z: rBz }).z * e.z;
-        const k = imA + iiA * jEA * jEA + imB + iiB * jEB * jEB;
-        if (k < 1e-9) continue;
-        const lam = -(va - vb + bias) / k;
-        bA.vel.x += lam * e.x * imA; bA.vel.z += lam * e.z * imA;
-        bA.angVel += iiA * jEA * lam;
-        if (bB) {
-          bB.vel.x -= lam * e.x * imB; bB.vel.z -= lam * e.z * imB;
-          bB.angVel -= iiB * jEB * lam;
-        }
-      }
-    }
-  }
-  prevContacts.clear();
-  for (const c of contacts) c.pts.forEach((p, i) =>
-    prevContacts.set(pairKey(c, p, i), { jn: p.jn, jf: p.jf, age: p.age }));
-}
-function positionPass() {
-  for (const c of contacts) {
-    const A = c.a, B = c.b, n = c.n;
-    const imA = A.grabbed ? 0 : (A.isStatic ? 0 : A.invMass);
-    const imB = B.grabbed ? 0 : (B.isStatic ? 0 : B.invMass);
-    const im = imA + imB;
-    if (!im) continue;
-    for (const p of c.pts) {
-      const pen = -p.sep - 0.0008;
-      if (pen <= 0) continue;
-      const corr = Math.min(0.25 * pen, 0.004);
-      A.pos.x -= n.x * corr * imA / im; A.pos.z -= n.z * corr * imA / im;
-      B.pos.x += n.x * corr * imB / im; B.pos.z += n.z * corr * imB / im;
-    }
-  }
-}
-function rollingResistance(dt) {
-  for (const c of contacts) {
-    if (Math.abs(c.n.z) < 0.995) continue;  // только почти плоское (уклон ≤6°)
-    for (const B of [c.a, c.b]) {
-      if (B.isStatic || B.grabbed) continue;
-      if (B.shapes.length !== 1 || B.shapes[0].c !== 1) continue;
-      const r = B.shapes[0].r;
-      const vp = B.vel.x + B.angVel * r;
-      if (Math.abs(vp) > 0.35) continue;
-      if (Math.abs(B.vel.x) < 0.03) { B.vel.x = 0; continue; }
-      const dv = Math.min(0.15 * dt, Math.abs(B.vel.x));
-      B.vel.x -= dv * Math.sign(B.vel.x);
-    }
-  }
-}
-
-/* ============ СЦЕНА: натуральная машина (метры) ============
-   Стальной шар → горка → стол с домино → стеклянный шарик →
-   жёлоб → маятник с лопатой → латунный колокол с язычком. */
+/* Машина Голдберга на готовых библиотеках:
+   физика — Rapier 0.21 (Rust → WASM), рендер — three.js r187,
+   камера — OrbitControls, окружение — RoomEnvironment.
+   Тела и сцена — как в проверенной 2D-модели (12/12), координаты перенесены 1:1:
+   стальной шар 2,1 кг → горка 22° → домино МДФ 190×50×8 (58 г) ×8 →
+   стеклянный шарик 84 г с обрыва → жёлоб 13° → маятник-молот 150 г →
+   латунный колокол 160 г → страйкеры Ø24 мм. Ось Y — вверх. */
 
 const G = 9.81;
-let floor, ramp, runway, runway2, chute, crossbar, strikerL, strikerR;
-let ball, marble, mallet, bell, clapper;
-const dominoes = [];
+const DT = 1 / 240;
+
+/* ---------- сцена (метры, из проверенной 12/12 конфигурации) ---------- */
+const RAMP_TOP = { x: 0.10, y: 0.94 }, RAMP_A = 22 * Math.PI / 180, RAMP_L = 0.92;
+const CHUTE_DZ = 0.318, CHUTE_DX = 1.364, CHUTE_A = Math.atan2(CHUTE_DZ, CHUTE_DX);
+const CHUTE_X0 = 1.585, CHUTE_Y0 = 0.578;   // верх жёлоба — вплотную под обрывом зоны (1.56@0.575)
 const TILE_N = 8, TILE_STEP = 0.055, TILE0 = 0.985;
-const RAMP_TOP = { x: 0.10, z: 0.94 }, RAMP_A = 22 * Math.PI / 180, RAMP_L = 0.92;
-const CHUTE_A = Math.atan(0.318 / 1.389), CHUTE_L = Math.hypot(1.389, 0.318);
-function rampBody(b, top, L, a) {  // верх доски в top, вниз по склону
-  b.pos = { x: top.x + Math.cos(a) * L / 2, z: top.z - Math.sin(a) * L / 2 };
-  b.angle = -a;
-  b.home = { x: b.pos.x, z: b.pos.z, angle: b.angle };
+const ZONE2_A = -0.0175;                    // уклон зоны к обрыву 1.0° (плашки устойчивы)
+const zone2Y = x => 0.575 - (x - 1.26) * 0.0175;  // поверхность домино-зоны
+const chuteY = x => 0.542 - (x - 1.55) * (CHUTE_DZ / CHUTE_DX); // верх жёлоба
+const rampY = x => RAMP_TOP.y - (x - RAMP_TOP.x) * Math.tan(RAMP_A);
+
+const HOME = {
+  ball: (() => {  // центр шара над доской горки (x=0.16), без пересечения
+    const ySurf = RAMP_TOP.y - (0.16 - RAMP_TOP.x) * Math.tan(RAMP_A)
+                   + 0.008 / Math.cos(RAMP_A);
+    return { x: 0.16, y: ySurf + 0.04 * Math.cos(RAMP_A) + 0.002, rot: 0 };
+  })(),
+  domino: i => ({ x: TILE0 + i * TILE_STEP, y: zone2Y(TILE0 + i * TILE_STEP) + 0.107, rot: ZONE2_A }),
+  marble: { x: 1.43, y: zone2Y(1.43) + 0.021, rot: 0 },
+  mallet: { x: 3.06, y: 0.28, rot: 0 },
+  bell:   { x: 3.25, y: 0.42, rot: 0 },     // юбка от 3.201: зазор 2 см от головы молота (до 3.18)
+  strikerL: { x: 3.185, y: 0.35, rot: 0 },   // вплотную к юбке (3.201-0.012-4мм)
+  strikerR: { x: 3.315, y: 0.35, rot: 0 },
+};
+
+let world, R, bodies = [], kindOf = new Map(); // colliderHandle -> kind
+const byName = {};
+const prevVel = new Map();   // handle -> {vx,vy,w} до шага (для силы удара)
+
+/* ---------- построение мира ---------- */
+function stdBody(o) {
+  const bd = o.fixed
+    ? R.RigidBodyDesc.fixed().setTranslation(o.x, o.y).setRotation(o.rot || 0)
+    : R.RigidBodyDesc.dynamic().setTranslation(o.x, o.y)
+        .setLinearDamping(o.ldamp ?? 0.01).setAngularDamping(o.adamp ?? 0.01)
+        .setRotation(o.rot || 0);
+  if (o.ccd) bd.setCcdEnabled(true);
+  if (!o.fixed) bd.setCanSleep(false);
+  const body = world.createRigidBody(bd);
+  for (const c of o.colliders) {
+    // поворот доски задаётся телу (o.rot) — коллайдер наследует его автоматически,
+    // поэтому c.orot здесь НЕ добавляется (иначе двойной поворот)
+    const cd = c.ball
+      ? R.ColliderDesc.ball(c.r).setTranslation(c.ox || 0, c.oy || 0)
+      : R.ColliderDesc.cuboid(c.hx, c.hy).setTranslation(c.ox || 0, c.oy || 0);
+    cd.setDensity(c.density ?? 1).setFriction(c.fr ?? 0.5).setRestitution(c.rest ?? 0.1);
+    if (c.events) cd.setActiveEvents(R.ActiveEvents.COLLISION_EVENTS);
+    const col = world.createCollider(cd, body);
+    kindOf.set(col.handle, o.kind);
+  }
+  byName[o.name] = body;
+  bodies.push({ name: o.name, kind: o.kind, body, fixed: !!o.fixed, dep: o.dep ?? 0.06,
+    home: { x: o.x, y: o.y, rot: o.rot || 0 } });
+  return body;
 }
-function restOnRamp(top, a, x, rr) {  // центр круга rr над доской
-  const t = (x - top.x) / Math.cos(a);
-  return { x: top.x + Math.cos(a) * t + Math.sin(a) * rr,
-           z: top.z - Math.sin(a) * t + Math.cos(a) * rr };
+function pivotTo(worldPointX, worldPointY, body, ax, ay) {
+  // «нить»: фиксированная точка мира + revolute (шарнир без трения — подшипник)
+  const anchor = world.createRigidBody(
+    R.RigidBodyDesc.fixed().setTranslation(worldPointX, worldPointY));
+  const j = world.createImpulseJoint(
+    R.JointData.revolute({ x: ax, y: ay }, { x: 0, y: 0 }), body, anchor, true);
+  return anchor;
 }
 
-function buildScene() {
-  const S = c => makeBody({ ...c, static: true });
-  floor = S({ name: "floor", kind: "floor", x: 2.2, z: -0.02, dep: 6.0,
-    friction: .6, restitution: .1, shapes: [{ b: 1, hw: 6.0, hh: 0.02 }] });
-  ramp = S({ name: "ramp", kind: "ramp", x: 0, z: 0, dep: .16, friction: .22,
-    shapes: [{ b: 1, hw: RAMP_L / 2, hh: 0.008 }] });
-  rampBody(ramp, RAMP_TOP, RAMP_L, RAMP_A);
-  runway = S({ name: "runway", kind: "runway", x: 0.985, z: 0.56, dep: .16,
-    friction: .18, restitution: .1, shapes: [{ b: 1, hw: 0.055, hh: 0.01 }] });  // зона разгона шара
-  runway2 = S({ name: "runway2", kind: "runway", x: 1.26, z: 0.565, dep: .16, angle: -0.044,
-    friction: .50, restitution: .1, shapes: [{ b: 1, hw: 0.30, hh: 0.01 }] });   // домино-зона, уклон 2.5° к обрыву 1.56
-  chute = S({ name: "chute", kind: "chute", x: 0, z: 0, dep: .14, friction: .02,
-    restitution: .08, shapes: [{ b: 1, hw: CHUTE_L / 2, hh: 0.006 }] });
-  rampBody(chute, { x: 1.55, z: 0.542 }, CHUTE_L, CHUTE_A);
-  crossbar = S({ name: "crossbar", kind: "crossbar", x: 3.16, z: 0.56, dep: .06,
-    friction: .5, restitution: .1, shapes: [{ b: 1, hw: 0.45, hh: 0.02 }] });
+function buildWorld() {
+  world = new R.World({ x: 0, y: -G });
+  world.timestep = DT;
+  world.integrationParameters.numSolverIterations = 12;
 
-  // стальной шар Ø80 мм: 7850·(4/3)π·0.04³ = 2.10 кг
-  ball = makeBody({ name: "ball", kind: "ball", mass: 2.10, dep: .08,
-    friction: .22, restitution: .12, ldamp: .01, adamp: .01,
-    x: 0, z: 0, shapes: [{ c: 1, r: 0.04 }] });
-  // домино-плашки машины Голдберга: МДФ 190×50×8 мм = 57 г (720 кг/м³)
-  for (let i = 0; i < TILE_N; i++)
-    dominoes.push(makeBody({ name: "dom" + i, kind: "domino", mass: 0.0576,
-      dep: .05, friction: .25, restitution: .08, ldamp: .005, adamp: .02,
-      x: TILE0 + i * TILE_STEP, z: 0.566 - (TILE0 + i * TILE_STEP - 0.96) * 0.044 + 0.107,
-      shapes: [{ b: 1, hw: 0.004, hh: 0.095, oz: -0.012 }] }));
-  // стеклянный шарик Ø40 мм: 2500·(4/3)π·0.02³ = 84 г
-  marble = makeBody({ name: "marble", kind: "marble", mass: 0.0836, dep: .04,
-    friction: .05, restitution: .15, ldamp: .01, adamp: .01,
-    x: 1.43, z: 0.585, shapes: [{ c: 1, r: 0.02 }] });
-  // маятник-молот (по рабочей схеме): голова сосны 240×320×40 (150 г),
-  // ЦМ в голове, короткая палка к оси на 0.62 — радиус маятника 0.34
-  mallet = makeBody({ name: "mallet", kind: "mallet", mass: 0.150, dep: .04,
-    friction: .20, restitution: .45, ldamp: .03, adamp: .06,
-    x: 3.06, z: 0.28, pivot: [0, 0.52],
-    shapes: [{ b: 1, hw: 0.12, hh: 0.16 },
-             { b: 1, hw: 0.005, hh: 0.025, oz: 0.185 }] });  // палка: 0.44..0.49
-  // латунный колокол Ø95 мм, стенка ~1,5 мм — 160 г (оболочка из 6 стенок)
-  bell = makeBody({ name: "bell", kind: "bell", mass: 0.16, dep: .095,
-    friction: .20, restitution: .20, ldamp: .02, adamp: .06,
-    x: 3.26, z: 0.42, pivot: [0, 0.60],
-    shapes: [
-      { b: 1, hw: .006, hh: .02, oz: -.05, ox: .043 }, { b: 1, hw: .006, hh: .02, oz: -.05, ox: -.043 },
-      { b: 1, hw: .006, hh: .03, oz: -.02, ox: .036 }, { b: 1, hw: .006, hh: .03, oz: -.02, ox: -.036 },
-      { b: 1, hw: .006, hh: .025, oz: .025, ox: .026 }, { b: 1, hw: .006, hh: .025, oz: .025, ox: -.026 }] });
-  // страйкеры: два латунных шарика Ø22 мм (55 г) на нитях по бокам юбки;
-  // колокол, качаясь, сам звенит о них (как в настольном колокольчике)
-  // страйкеры — латунные шарики Ø24 мм (69 г)
-  const mkStriker = (nm, x) => makeBody({ name: nm, kind: "striker", mass: 0.069,
-    dep: .024, friction: .15, restitution: .55, ldamp: .02, adamp: .10,
-    x, z: 0.35, pivot: [0, 0.25], shapes: [{ c: 1, r: 0.012 }] });
-  strikerL = mkStriker("strikerL", 3.26 - 0.10);
-  strikerR = mkStriker("strikerR", 3.26 + 0.10);
+  /* статика: пол, горка, зоны стола, жёлоб */
+  stdBody({ name: "floor", kind: "floor", fixed: true, x: 2.2, y: -0.02, dep: 6,
+    colliders: [{ hx: 6, hy: 0.02, density: 1, fr: 0.6, rest: 0.1 }] });
+  stdBody({ name: "ramp", kind: "ramp", fixed: true,
+    x: RAMP_TOP.x + Math.cos(RAMP_A) * RAMP_L / 2,
+    y: RAMP_TOP.y - Math.sin(RAMP_A) * RAMP_L / 2, rot: -RAMP_A, dep: 0.16,
+    colliders: [{ hx: RAMP_L / 2, hy: 0.008, density: 1, fr: 0.22, rest: 0.08 }] });
+  stdBody({ name: "runway", kind: "runway", fixed: true, x: 0.985, y: 0.56, dep: 0.16,
+    colliders: [{ hx: 0.055, hy: 0.01, density: 1, fr: 0.18, rest: 0.1 }] });      // разгон шара
+  stdBody({ name: "runway2", kind: "runway", fixed: true, x: 1.26, y: 0.565,
+    rot: ZONE2_A, dep: 0.16,
+    colliders: [{ hx: 0.30, hy: 0.01, density: 1, fr: 0.9, rest: 0.1 }] });        // домино-зона «липкая», обрыв 1.56
+  stdBody({ name: "chute", kind: "chute", fixed: true,
+    x: CHUTE_X0 + Math.cos(CHUTE_A) * (CHUTE_DX / 2),   // верх доски в (CHUTE_X0, CHUTE_Y0)
+    y: CHUTE_Y0 - Math.sin(CHUTE_A) * (CHUTE_DX / 2),
+    rot: -CHUTE_A, dep: 0.14,
+    colliders: [{ hx: CHUTE_DX / 2, hy: 0.008, density: 1, fr: 0.02, rest: 0.08 }] });
+  stdBody({ name: "crossbar", kind: "crossbar", fixed: true, x: 3.16, y: 0.56, dep: 0.06,
+    colliders: [{ hx: 0.45, hy: 0.02, density: 1, fr: 0.5, rest: 0.1 }] });
+
+  /* стальной шар Ø80 мм, 2,1 кг (сталь 7850: площадь πr² → density 410) */
+  stdBody({ name: "ball", kind: "ball", x: HOME.ball.x, y: HOME.ball.y, dep: 0.08,
+    ldamp: 0.05, adamp: 2.5, ccd: true,  // 2.5: сталь по дереву — заметное сопротивление качению
+    colliders: [{ ball: true, r: 0.04, density: 410, fr: 0.22, rest: 0.12, events: true }] });
+
+  /* домино МДФ 190×50×8 мм, 58 г (720 кг/м³): плашка с ЦМ на 12 мм ниже геометрии */
+  for (let i = 0; i < TILE_N; i++) {
+    const h = HOME.domino(i);
+    stdBody({ name: "dom" + i, kind: "domino", x: h.x, y: h.y, rot: h.rot, dep: 0.05,
+      ldamp: 0.005, adamp: 0.02,
+      colliders: [{ hx: 0.004, hy: 0.095, oy: -0.012, density: 30.3, fr: 0.25, rest: 0.08, events: true }] });
+  }
+
+  /* стеклянный шарик Ø40 мм, 84 г (стекло 2500: density 66.4) */
+  stdBody({ name: "marble", kind: "marble", x: HOME.marble.x, y: HOME.marble.y, dep: 0.04,
+    ldamp: 0.03, adamp: 0.25, ccd: true,  // стекло катится легче
+    colliders: [{ ball: true, r: 0.02, density: 66.4, fr: 0.05, rest: 0.15, events: true }] });
+
+  /* маятник-молот: голова сосны 240×320 (146 г) + палка (4 г); ось на 0.80 */
+  stdBody({ name: "mallet", kind: "mallet", x: HOME.mallet.x, y: HOME.mallet.y, dep: 0.04,
+    ldamp: 0.03, adamp: 0.06,
+    colliders: [
+      { hx: 0.08, hy: 0.16, density: 4.3, fr: 0.2, rest: 0.45, events: true },          // голова 160×320×40, 150 г
+      { hx: 0.005, hy: 0.025, oy: 0.185, density: 2, fr: 0.2, rest: 0.3 },              // рычаг у головы
+    ] });
+  pivotTo(3.06, 0.80, byName.mallet, 0, 0.52);
+
+  /* латунный колокол Ø95 мм: 160 г, 6 стенок-коллайдеров по профилю юбки */
+  const bellWalls = [
+    { ox: .043, oy: -.05, hy: .02 }, { ox: -.043, oy: -.05, hy: .02 },
+    { ox: .036, oy: -.02, hy: .03 }, { ox: -.036, oy: -.02, hy: .03 },
+    { ox: .026, oy: .025, hy: .025 }, { ox: -.026, oy: .025, hy: .025 }];
+  stdBody({ name: "bell", kind: "bell", x: HOME.bell.x, y: HOME.bell.y, dep: 0.095,
+    ldamp: 0.01, adamp: 0.025,
+    colliders: bellWalls.map(w => ({ hx: 0.006, hy: w.hy, ox: w.ox, oy: w.oy,
+      density: 44, fr: 0.2, rest: 0.2, events: true })) });
+  pivotTo(3.25, 1.02, byName.bell, 0, 0.60);
+
+  /* страйкеры: латунные шарики Ø24 мм, 69 г, по бокам юбки */
+  for (const nm of ["strikerL", "strikerR"]) {
+    const h = HOME[nm];
+    stdBody({ name: nm, kind: "striker", x: h.x, y: h.y, dep: 0.024,
+      ldamp: 0.01, adamp: 0.05,
+      colliders: [{ ball: true, r: 0.012, density: 153, fr: 0.1, rest: 0.72, events: true }] });
+    pivotTo(h.x, h.y + 0.25, byName[nm], 0, 0.25);
+  }
+
+
 }
-buildScene();
 
+/* ---------- reset / run ---------- */
+let simT = 0, running = false, ringCount = 0, dominoFell = 0, lastEvent = "";
+let flags = {};
 function reset() {
   for (const b of bodies) {
-    if (b === ramp || b === chute) continue;
-    b.pos = { x: b.home.x, z: b.home.z }; b.angle = b.home.angle || 0;
-    b.vel = { x: 0, z: 0 }; b.angVel = 0; b.grabbed = null;
+    if (b.fixed) continue;
+    const h = b.home;
+    b.body.setTranslation({ x: h.x, y: h.y }, true);
+    b.body.setRotation(h.rot || 0, true);
+    b.body.setLinvel({ x: 0, y: 0 }, true);
+    b.body.setAngvel(0, true);
   }
-  ball.home = { ...restOnRamp(RAMP_TOP, RAMP_A, 0.16, 0.04), angle: 0 };
-  ball.pos = { ...ball.home };
-  simT = 0; ringCount = 0; dominoFell.clear(); running = false;
-  lastEvent = "нажмите «Запуск»"; flags = {};
-  updateHUD();
+  simT = 0; ringCount = 0; dominoFell = 0;
+  window.__peakBell = 0;
+  sndState.clear();
+  flags = {}; lastEvent = "нажмите «Запуск»";
 }
 
-/* --- шаг 1/240 c --- */
-const DT = 1 / 240;
-let simT = 0, running = false, ringCount = 0, lastEvent = "";
-let flags = {};
-const dominoFell = new Set();
-function substep(dt) {
+/* ---------- шаг физики + события ---------- */
+function saveVel() {
   for (const b of bodies) {
-    if (b.isStatic) continue;
-    if (b.grabbed) {
-      const t = b.grabbed, np = { x: t.tx - t.ox, z: t.tz - t.oz };
-      b.vel = { x: clamp((np.x - b.pos.x) / dt, -30, 30),
-                z: clamp((np.z - b.pos.z) / dt, -30, 30) };
-      b.pos = np; b.angVel *= 0.5;
-    } else {
-      b.vel.z -= G * dt;
-      b.vel.x *= 1 - b.ldamp * dt; b.vel.z *= 1 - b.ldamp * dt;
-      b.angVel *= 1 - b.adamp * dt;
-      b.pos.x += b.vel.x * dt; b.pos.z += b.vel.z * dt;
-      b.angle += b.angVel * dt;
-    }
+    if (b.fixed) continue;
+    const v = b.body.linvel(), w = b.body.angvel();
+    prevVel.set(b.body.handle, { vx: v.x, vy: v.y, w });
   }
-  collide();
-  solve(dt);
-  positionPass();
-  rollingResistance(dt);
-  for (const b of bodies) {
-    if (b.isStatic || b.grabbed) continue;
-    if (Math.abs(b.angVel) > 15) b.angVel = 15 * Math.sign(b.angVel);
-    const sp = Math.hypot(b.vel.x, b.vel.z);
-    if (sp > 25) { b.vel.x *= 25 / sp; b.vel.z *= 25 / sp; }
-  }
-  // события и звук — по скорости сближения ДО решения
-  for (const c of contacts) {
-    const ka = c.a.kind, kb = c.b.kind, v = c.vn0;
-    const has = n => ka === n || kb === n;
-    if (v < -0.25 && has("bell") && has("striker")) {
-      ring(Math.min(-v, 4)); ringCount++;
+}
+function strikeVel(b1, b2, n) {  // скорость сближения по нормали (по ДО-шаговым скоростям)
+  const p1 = prevVel.get(b1.handle), p2 = prevVel.get(b2.handle);
+  if (!p1 || !p2) return 0;
+  // скорость точки контакта: v + ω×r ; r ≈ полу-вектор между ЦМ тел
+  const t1 = b1.translation(), t2 = b2.translation();
+  const r1 = { x: (t2.x - t1.x) / 2, y: (t2.y - t1.y) / 2 };
+  const r2 = { x: -r1.x, y: -r1.y };
+  const v1 = { x: p1.vx - p1.w * r1.y, y: p1.vy + p1.w * r1.x };
+  const v2 = { x: p2.vx - p2.w * r2.y, y: p2.vy + p2.w * r2.x };
+  return ((v2.x - v1.x) * n.x + (v2.y - v1.y) * n.y);
+}
+/* звуковые фронт-пар: [имя1, имя2, тип] */
+const sndPairs = [
+  ["bell", "strikerL", "ring"], ["bell", "strikerR", "ring"],
+  ["bell", "mallet", "tok"],
+  ["marble", "mallet", "glass"],
+  ["ball", "dom0", "knock"], ["ball", "runway", "knock"], ["ball", "ramp", "knock"],
+  ["marble", "chute", "glassSoft"],
+];
+const sndState = new Map();   // key -> был ли контакт
+function bellRings() {
+  for (const [a, b, kind] of sndPairs) {
+    const ca = byName[a].collider(0), cb = byName[b].collider(0);
+    let touching = false;
+    world.contactPair(ca, cb, (m) => { if (m.numContacts() > 0) touching = true; });
+    const key = a + "×" + b, was = sndState.get(key) || false;
+    sndState.set(key, touching);
+    if (!touching || was) continue;   // только фронт
+    // скорость сближения по ДО-шаговым скоростям
+    const p1 = prevVel.get(byName[a].handle), p2 = prevVel.get(byName[b].handle);
+    const v = Math.hypot((p1 ? p1.vx : 0) - (p2 ? p2.vx : 0), (p1 ? p1.vy : 0) - (p2 ? p2.vy : 0));
+    const vn = Math.min(v, 5);
+    if (kind === "ring") {
+      // отсечь ложный фронт: колокол должен реально двигаться
+      const av = Math.abs(byName[a].angvel()), sv = Math.abs(byName[b].angvel());
+      if (av < 0.05 && sv < 0.05) continue;
+      const w = sv + av * 0.5;
+      ring(Math.min(1 + w * 2.5, 4)); ringCount++;
       lastEvent = "ЗВОНОК №" + ringCount;
-    } else if (v < -0.4 && has("bell") && has("mallet")) {
-      tok(Math.min(-v, 5)); lastEvent = "молоток бьёт в колокол";
-    } else if (v < -0.5 && has("marble") && has("mallet")) {
-      glassTap(Math.min(-v, 4)); lastEvent = "шарик ударил в лопасть";
-    } else if (v < -0.8 && (has("ball") || has("domino")) && (has("domino") || has("runway") || has("ball"))) {
-      knock(Math.min(-v, 5));
-    } else if (v < -0.6 && has("marble") && (has("chute") || has("floor"))) {
-      glassTap(Math.min(-v, 3) * 0.6);
-    } else if (v < -1.0 && has("marble")) {
-      glassTap(2);
-    }
-  }
-  for (const d of dominoes)
-    if (!dominoFell.has(d) && Math.abs(d.angle) > 0.5) {
-      dominoFell.add(d);
-      if (dominoFell.size === 1) lastEvent = "домино пошли";
-    }
-}
-
-/* ============ РЕНДЕР: натуральные материалы ============ */
-const COL = {
-  wood: [0xb1, 0x79, 0x3f], woodD: [0x7c, 0x53, 0x28], woodL: [0xd9, 0xa9, 0x6a],
-  ivory: [0xef, 0xe6, 0xd3], ivoryD: [0xc9, 0xbb, 0x9f],
-  steel: [0xb9, 0xc3, 0xcf], glass: [0xa5, 0xd4, 0xef],
-  brass: [0xc9, 0x97, 0x3f], brassD: [0x8a, 0x64, 0x20],
-  floor: [0xcf, 0xa9, 0x77],
-};
-const rgb = (c, m = 1, a = 1) =>
-  `rgba(${Math.min(255, c[0] * m | 0)},${Math.min(255, c[1] * m | 0)},${Math.min(255, c[2] * m | 0)},${a})`;
-
-const PROF = [[0, .049], [.18, .047], [.45, .040], [.72, .033], [.90, .024], [1, .012]];
-const profR = f => {
-  for (let i = 1; i < PROF.length; i++)
-    if (f <= PROF[i][0]) { const [f0, r0] = PROF[i - 1], [f1, r1] = PROF[i];
-      return r0 + (r1 - r0) * (f - f0) / (f1 - f0); }
-  return PROF[PROF.length - 1][1];
-};
-const wpt = (b, lx, ly, lz) => {
-  const p = rot2({ x: lx, z: lz }, b.angle);
-  return { x: b.pos.x + p.x, y: ly, z: b.pos.z + p.z };
-};
-
-/* единый список отрисовки с сортировкой по глубине (painter) */
-function paintItems(items) {
-  items.sort((u, v) => v.z - u.z);
-  for (const it of items) {
-    if (it.k === "p") {
-      ctx.beginPath(); ctx.moveTo(it.pts[0].x, it.pts[0].y);
-      for (let i = 1; i < it.pts.length; i++) ctx.lineTo(it.pts[i].x, it.pts[i].y);
-      ctx.closePath(); ctx.fillStyle = it.fill; ctx.fill();
-      if (it.stroke) { ctx.strokeStyle = it.stroke; ctx.lineWidth = it.lw || 1; ctx.stroke(); }
-    } else if (it.k === "s") {
-      ctx.beginPath(); ctx.arc(it.x, it.y, it.r, 0, 7);
-      if (it.stops) {
-        const g = ctx.createRadialGradient(
-          it.x - it.r * 0.35, it.y - it.r * 0.38, it.r * 0.1, it.x, it.y, it.r);
-        for (const [o, c] of it.stops) g.addColorStop(o, c);
-        ctx.fillStyle = g;
-      } else ctx.fillStyle = it.fill;
-      ctx.fill();
-      if (it.rim) { ctx.strokeStyle = it.rim; ctx.lineWidth = 1; ctx.stroke(); }
-    } else {
-      ctx.beginPath(); ctx.moveTo(it.a.x, it.a.y); ctx.lineTo(it.b.x, it.b.y);
-      ctx.strokeStyle = it.color; ctx.lineWidth = it.w; ctx.lineCap = "round"; ctx.stroke();
-    }
+    } else if (kind === "tok") { tok(vn); lastEvent = "молот бьёт в колокол"; }
+    else if (kind === "glass") { glassTap(vn); lastEvent = "шарик ударил в молот"; }
+    else if (kind === "glassSoft") glassTap(vn * 0.6);
+    else knock(vn);
   }
 }
-function faceItem(pts3, n3, base, hl) {
-  const c = { x: 0, y: 0, z: 0 };
-  for (const p of pts3) { c.x += p.x / 4; c.y += p.y / 4; c.z += p.z / 4; }
-  const d = { x: c.x - cam.eye.x, y: c.y - cam.eye.y, z: c.z - cam.eye.z };
-  const l = Math.hypot(d.x, d.y, d.z) || 1;
-  if (n3.x * d.x / l + n3.y * d.y / l + n3.z * d.z / l <= 0.03) return null;
-  const pr = [];
-  for (const p of pts3) { const s = cam.project(p); if (!s) return null; pr.push(s); }
-  const lam = Math.max(0, n3.x * LIGHT.x + n3.y * LIGHT.y + n3.z * LIGHT.z);
-  return { k: "p", z: (pr[0].d + pr[1].d + pr[2].d + pr[3].d) / 4,
-    pts: pr, fill: rgb(base, 0.5 + 0.55 * lam),
-    stroke: hl ? rgb(base, 1.25, 0.5) : null, lw: 1 };
-}
-function prism(b, base, hx, hz, ox = 0, oz = 0, hyIn) {
-  const hy = (hyIn ?? b.dep ?? 0.12) / 2, a = b.angle;
-  const R = (lx, ly, lz) => {
-    const p = rot2({ x: lx + ox, z: lz + oz }, a);
-    return { x: b.pos.x + p.x, y: ly, z: b.pos.z + p.z };
-  };
-  const nrm = (x, z) => { const p = rot2({ x, z }, a); const l = Math.hypot(p.x, p.z) || 1;
-    return { x: p.x / l, y: 0, z: p.z / l }; };
-  const out = [];
-  const F = (pts, n, hl) => { const it = faceItem(pts, n, base, hl); if (it) out.push(it); };
-  F([R(-hx, hy, -hz), R(hx, hy, -hz), R(hx, hy, hz), R(-hx, hy, hz)], { x: 0, y: 1, z: 0 }, true);
-  F([R(-hx, -hy, hz), R(hx, -hy, hz), R(hx, -hy, -hz), R(-hx, -hy, -hz)], { x: 0, y: -1, z: 0 });
-  F([R(hx, -hy, -hz), R(hx, -hy, hz), R(hx, hy, hz), R(hx, hy, -hz)], nrm(1, 0));
-  F([R(-hx, -hy, hz), R(-hx, -hy, -hz), R(-hx, hy, -hz), R(-hx, hy, hz)], nrm(-1, 0));
-  F([R(-hx, -hy, hz), R(-hx, hy, hz), R(hx, hy, hz), R(hx, -hy, hz)], nrm(0, 1));
-  F([R(-hx, -hy, -hz), R(hx, -hy, -hz), R(hx, hy, -hz), R(-hx, hy, -hz)], nrm(0, -1));
-  return out;
-}
-function spriteAt(x, y, z, r, stops, rim) {
-  const s = cam.project({ x, y, z });
-  if (!s) return null;
-  const R = r * cam.f / s.d;
-  if (R < 1.2) return null;
-  return { k: "s", z: s.d - 0.001, x: s.x, y: s.y, r: R, stops, rim, fill: null };
-}
-function lineItem(p1, p2, color, w) {
-  const a = cam.project(p1), b = cam.project(p2);
-  if (!a || !b) return null;
-  return { k: "l", z: (a.d + b.d) / 2, a, b, color, w };
-}
-const hash = s => { let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) | 0;
-  return ((h >>> 0) % 97) / 97; };
-/* волокна дерева: 3-4 непрерывные линии вдоль верхней грани, смещённые по телу */
-function grain(b, s, items) {
-  const dep = b.dep ?? 0.12, hw = s.hw, topZ = s.hh;
-  const rnd = hash(b.name);
-  const lines = [
-    [dep * 0.16, 0.8, "rgba(112,72,36,.38)"],
-    [-dep * 0.18, 0.6, "rgba(112,72,36,.30)"],
-    [dep * 0.38, 0.45, "rgba(226,196,150,.45)"],
-    [-dep * 0.40, 0.5, "rgba(112,72,36,.22)"],
-  ];
-  for (const [gy, w, col] of lines) {
-    if (rnd > 0.5 && w < 0.7) continue;   // не всем доскам все волокна
-    const off = 0.03 + rnd * 0.1;
-    const p1 = wpt(b, -hw + 0.015, gy, topZ - 0.0005);
-    const p2 = wpt(b, hw - 0.015 - off * rnd, gy, topZ - 0.0005);
-    const it = lineItem(p1, p2, col, 1.1);
-    if (it) items.push(it);
-  }
+function stepOnce() {
+  saveVel();
+  world.step();
+  bellRings();
+  simT += DT;
+  // пик колокола и звон — внутри шага
+  window.__peakBell = Math.max(window.__peakBell || 0,
+    Math.abs(byName.bell.rotation()) * 180 / Math.PI);
+  // подсчёт упавших домино
+  let fell = 0;
+  for (let i = 0; i < TILE_N; i++)
+    if (Math.abs(byName["dom" + i].rotation()) > 0.5) fell++;
+  if (fell > dominoFell) { dominoFell = fell; if (fell === 1) lastEvent = "домино пошли"; }
 }
 
-/* --- пол: дощатый, тёплый --- */
-function drawFloor() {
-  const pg = ctx.createLinearGradient(0, cv.height * 0.42, 0, cv.height);
-  pg.addColorStop(0, rgb(COL.floor, 0.96)); pg.addColorStop(1, rgb(COL.floor, 0.72));
-  const cs = [[-1.2, -2.4], [6.8, -2.4], [6.8, 2.4], [-1.2, 2.4]]
-    .map(([x, y]) => cam.project({ x, y, z: 0 }));
-  if (cs.every(Boolean)) {
-    ctx.beginPath(); ctx.moveTo(cs[0].x, cs[0].y);
-    for (const p of cs) ctx.lineTo(p.x, p.y);
-    ctx.closePath(); ctx.fillStyle = pg; ctx.fill();
-    ctx.lineWidth = 1;
-    for (let y = -2.04; y <= 2.04; y += 0.34) {   // продольные швы досок
-      const a = cam.project({ x: -1.2, y, z: .002 }), b = cam.project({ x: 6.8, y, z: .002 });
-      if (a && b) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
-        ctx.strokeStyle = "rgba(120,85,55,.6)"; ctx.stroke(); }
-    }
-    for (const x of [0.9, 2.9, 4.9]) {             // поперечные стыки
-      const a = cam.project({ x, y: -2.04, z: .002 }), b = cam.project({ x, y: 2.04, z: .002 });
-      if (a && b) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
-        ctx.strokeStyle = "rgba(125,92,60,.4)"; ctx.stroke(); }
-    }
-    const e = [[-1.2, -2.4, 0], [6.8, -2.4, 0], [6.8, -2.4, -.03], [-1.2, -2.4, -.03]]
-      .map(([x, y, z]) => cam.project({ x, y, z }));
-    if (e.every(Boolean)) {
-      ctx.beginPath(); ctx.moveTo(e[0].x, e[0].y);
-      for (const p of e) ctx.lineTo(p.x, p.y);
-      ctx.closePath(); ctx.fillStyle = rgb(COL.woodD, .9); ctx.fill();
-    }
-  }
-}
-function shadowRect(x0, x1, z0, alpha) {  // пятно на полу/под конструкцией
-  const cx = (x0 + x1) / 2, a = (x1 - x0) / 2 + 0.02;
-  const pts = [];
-  for (let i = 0; i < 14; i++) {
-    const t = i / 14 * 2 * Math.PI;
-    const p = cam.project({ x: cx + a * Math.cos(t), y: 0.06 * Math.sin(t), z: z0 });
-    if (p) pts.push(p);
-  }
-  if (pts.length < 3) return;
-  ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
-  for (const p of pts) ctx.lineTo(p.x, p.y);
-  ctx.closePath(); ctx.fillStyle = "rgba(90,64,35," + alpha + ")"; ctx.fill();
-}
-function shadowOf(b) {
-  // тень: на полу (z=0) для висящих тел (колокол/язычок/маятник),
-  // на уровне низа — для тел на опорах (шары, домино)
-  const bb = bodyAABB(b, 0);
-  if (bb.x0 > bb.x1) return;
-  const hangs = b.kind === "bell" || b.kind === "clapper" || b.kind === "mallet";
-  const a = (bb.x1 - bb.x0) / 2 + 0.02, cx = (bb.x0 + bb.x1) / 2;
-  const dep = (b.dep ?? 0.12) / 2 + 0.02;
-  const zz = hangs ? 0.002 : Math.max(bb.z0, 0.002) - 0.002;
-  const pts = [];
-  for (let i = 0; i < 14; i++) {
-    const t = i / 14 * 2 * Math.PI;
-    const p = cam.project({ x: cx + a * Math.cos(t), y: dep * Math.sin(t), z: zz });
-    if (p) pts.push(p);
-  }
-  if (pts.length < 3) return;
-  ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
-  for (const p of pts) ctx.lineTo(p.x, p.y);
-  ctx.closePath();
-  ctx.fillStyle = hangs ? "rgba(90,64,35,.26)" : "rgba(90,64,35,.30)";
-  ctx.fill();
-}
-
-/* --- сцена целиком --- */
-function draw() {
-  cam.update();
-  const bg = ctx.createLinearGradient(0, 0, 0, cv.height);
-  bg.addColorStop(0, "#f4efe4"); bg.addColorStop(.6, "#ece3d1"); bg.addColorStop(1, "#dfd3bc");
-  ctx.fillStyle = bg; ctx.fillRect(0, 0, cv.width, cv.height);
-  drawFloor();
-  // тени статики: опоры, стол-зоны, перекладина, жёлоб (низко)
-  shadowRect(0.98, 1.04, 0.575, .22);   // стол-зона разгона
-  shadowRect(0.96, 1.56, 0.575, .22);   // зона домино
-  shadowRect(0.23, 0.29, 0.905, .20);   // козлы горки
-  shadowRect(0.55, 0.61, 0.80, .20);
-  shadowRect(0.84, 0.90, 0.665, .20);
-  shadowRect(1.98, 2.02, 0.42, .18);    // стойки жёлоба
-  shadowRect(2.42, 2.46, 0.30, .18);
-  shadowRect(2.76, 2.80, 0.02, .16);    // стойки портала
-  shadowRect(3.52, 3.56, 0.02, .16);
-  shadowRect(2.71, 3.61, 0.55, .14);    // перекладина (высоко — тень слабее)
-  shadowRect(1.54, 1.58, 0.545, .20);   // начало жёлоба
-  for (const b of bodies) if (!b.isStatic) shadowOf(b);
-
-  const items = [];
-  const P = (arr) => { if (arr) for (const x of arr) items.push(x); };
-
-  // опоры-ножки (стоят чуть позади/спереди плоскости машины, как у настоящего стола)
-  for (const [lx, lz, hz] of [[1.00, .275, .275], [1.70, .275, .275]])
-    for (const y of [-.19, .19])
-      P(prism({ pos: { x: lx, z: lz }, angle: 0, dep: .034 }, COL.woodD, .017, hz, 0, 0));
-  { // козлы под горкой: высота ровно до низа доски над каждой стойкой
-    for (const lx of [0.25, 0.57, 0.87]) {
-      const top = RAMP_TOP.z - Math.tan(RAMP_A) * (lx - RAMP_TOP.x) - 0.008;
-      for (const y of [-.19, .19])
-        P(prism({ pos: { x: lx, z: top / 2 }, angle: 0, dep: .034 }, COL.woodD, .017, top / 2, 0, 0));
-    }
-  }
-  { // стойки жёлоба (до низа доски над ними)
-    for (const lx of [1.98, 2.42]) {
-      const top = 0.542 - (lx - 1.55) * (0.42 / 1.29) - 0.012;
-      for (const y of [-.16, .16])
-        P(prism({ pos: { x: lx, z: top / 2 }, angle: 0, dep: .03 }, COL.woodD, .015, top / 2, 0, 0));
-    }
-  }
-  { // стойка-портал за колоколом (несёт перекладину на 0.95)
-    for (const lx of [2.78, 3.55])
-      P(prism({ pos: { x: lx, z: .33 }, angle: 0, dep: .05 }, COL.woodD, .022, .33, 0, 0, .3));
-    P(prism(crossbar, COL.wood, .45, .02, 0, 0));
-  }
-
-  // доски машины
-  P(prism(ramp, COL.wood, RAMP_L / 2, .008)); grain(ramp, ramp.shapes[0], items);
-  P(prism(runway, COL.wood, .42, .01)); grain(runway, runway.shapes[0], items);
-  P(prism(chute, COL.wood, CHUTE_L / 2, .008)); grain(chute, chute.shapes[0], items);
-
-  // домино: кость, точки на видимом торце (Y к камере), раскладка 2+1
-  for (let i = 0; i < dominoes.length; i++) {
-    const d = dominoes[i], hl = d.grabbed ? 1.25 : d.hover ? 1.12 : 1;
-    const base = d.grabbed || d.hover ? COL.ivory.map(c => c * 1.06) : COL.ivory;
-    P(prism(d, base, .004, .095, 0, -0.012));
-    { // обводка плашки для читаемости ряда
-      const a = d.angle;
-      const q = [[-.004, .095], [.004, .095], [.004, -.095], [-.004, -.095]].map(([lx, lz]) =>
-        cam.project(wpt(d, lx, 0.026, lz - 0.012)));
-      if (q.every(Boolean)) items.push({ k: "p", z: q[0].d - 0.002, pts: q, fill: "rgba(0,0,0,0)",
-        stroke: "rgba(90,70,50,.6)", lw: 1 });
-    }
-    // точки: 2 сверху + 1 снизу (по высоте, на оси торца Y=+0.024)
-    const face = 0.024;
-    const pips = [-0.03, -0.012, 0.042];
-    for (const lz of pips) {
-      const r = 0.0045;
-      const corners = [[-r, -r], [r, -r], [r, r], [-r, r]].map(([dx, dz]) =>
-        cam.project(wpt(d, 0, face, lz + dz)));
-      if (corners.every(Boolean)) {
-        const zd = corners.reduce((s, p) => s + p.d, 0) / 4;
-        items.push({ k: "p", z: zd - 0.004, pts: corners, fill: "#3a3226" });
-      }
-    }
-  }
-
-  // шары: сталь и стекло
-  { const hl = ball.grabbed ? 1.3 : ball.hover ? 1.15 : 1;
-    const s = spriteAt(ball.pos.x, 0, ball.pos.z, .04,
-      [[0, `rgba(${250 * hl | 0},${252 * hl | 0},${255 * hl | 0},1)`],
-       [.25, rgb(COL.steel, 1.15 * hl)], [.55, rgb(COL.steel, .95 * hl)],
-       [.8, rgb([0x8a, 0x97, 0xa6], .9)], [1, rgb([0x51, 0x5f, 0x70], 1)]],
-      "rgba(40,50,62,.4)");
-    if (s) items.push(s);
-    if (ball.grabbed || ball.hover) { /* подсветка кольцом */
-      const c = cam.project({ x: ball.pos.x, y: 0, z: ball.pos.z });
-      if (c) items.push({ k: "s", z: c.d + .01, x: c.x, y: c.y, r: .048 * cam.f / c.d,
-        stops: null, fill: "rgba(177,121,63,.25)", rim: "rgba(177,121,63,.9)" });
-    } }
-  { const s = spriteAt(marble.pos.x, 0, marble.pos.z, .02,
-      [[0, "#ffffff"], [.3, "#d9f0fc"], [.6, "#a5d4ef"], [.85, "#6ea8d4"], [1, "#4e86ba"]],
-      "rgba(40,80,120,.45)");
-    if (s) items.push(s); }
-
-  // маятник: рейка-лопасть + палка до оси; нить подвеса видима
-  { const hl = mallet.grabbed ? 1.25 : mallet.hover ? 1.12 : 1;
-    P(prism(mallet, COL.woodL.map(c => c * hl), .12, .16, 0, 0));
-    P(prism(mallet, COL.wood.map(c => c * hl), .005, .025, 0, .185));
-    const thread = lineItem(wpt(mallet, 0, 0, 0.50), wpt(mallet, 0, 0, 0.525),
-      "rgba(90,64,28,.85)", 2);
-    if (thread) items.push(thread);
-    const c = spriteAt(3.06, 0, .52, .013, null, "rgba(60,44,16,.6)");
-    if (c) { c.fill = "#b98a2e"; items.push(c); } }
-
-  // колокол: профиль-оболочка + горло + язычок
-  { const K = 12, SEG = 18, rings = [];
-    for (let k = 0; k <= K; k++) {
-      const f = k / K, r = profR(f), z = -0.07 + 0.12 * f, pts = [];
-      for (let s2 = 0; s2 < SEG; s2++) {
-        const a = s2 / SEG * 2 * Math.PI;
-        pts.push(wpt(bell, r * Math.cos(a), r * Math.sin(a), z));
-      }
-      rings.push({ f, z, pts });
-    }
-    const hl = bell.grabbed ? 1.2 : bell.hover ? 1.1 : 1;
-    const base = COL.brass.map(c => c * hl);
-    // подчёркиваем рёбра колокола: каждый 3-й сегмент темнее
-
-    for (let k = 0; k < K; k++)
-      for (let s2 = 0; s2 < SEG; s2++) {
-        const s3 = (s2 + 1) % SEG;
-        const mid = (s2 + 0.5) / SEG * 2 * Math.PI;
-        const p = rot2({ x: Math.cos(mid), z: 0.3 }, bell.angle);
-        const n = { x: p.x, y: 0, z: p.z };
-        const it = faceItem([rings[k].pts[s2], rings[k].pts[s3], rings[k + 1].pts[s3], rings[k + 1].pts[s2]],
-          n, base);
-        if (it) { it.stroke = rgb(base, .45, .4); items.push(it); }
-      }
-    // горло (тёмный срез) и донышко-шапка
-    const mouth = rings[0].pts.map(p => cam.project(p));
-    if (mouth.every(Boolean)) {
-      const zc = mouth.reduce((s, p) => s + p.d, 0) / SEG;
-      items.push({ k: "p", z: zc - 0.01, pts: mouth, fill: "rgba(74,53,22,.92)" });
-    }
-    const cap = [];
-    for (let s2 = 0; s2 < SEG; s2++) {
-      const a = s2 / SEG * 2 * Math.PI;
-      cap.push(cam.project(wpt(bell, .011 * Math.cos(a), .011 * Math.sin(a), .05)));
-    }
-    if (cap.every(Boolean)) {
-      const zc = cap.reduce((s, p) => s + p.d, 0) / SEG;
-      items.push({ k: "p", z: zc - 0.02, pts: cap, fill: rgb(COL.brassD, 1) });
-    }
-    // страйкеры: нити + латунные шарики
-    for (const st of [strikerL, strikerR]) {
-      const th = lineItem(wpt(st, 0, 0, 0.25), wpt(st, 0, 0, 0.008),
-        "rgba(90,64,28,.85)", 1.8);
-      if (th) items.push(th);
-      const sp = spriteAt(st.pos.x, 0, st.pos.z, .012,
-        [[0, "#fff3d0"], [.35, "#e0b45f"], [.7, "#9a7226"], [1, "#6b4d18"]], "rgba(60,44,16,.55)");
-      if (sp) items.push(sp);
-    }
-    // нить подвеса колокола: от короны (z+.05) до шарнира (z+.66)
-    const bt = lineItem(wpt(bell, 0, 0, .06), wpt(bell, 0, 0, .59),
-      "rgba(120,84,34,.9)", 2.5);
-    if (bt) items.push(bt);
-    const pv = spriteAt(3.26, 0, .60, .013, null, "rgba(60,44,16,.6)");
-    if (pv) { pv.fill = "#b98a2e"; items.push(pv); } }
-
-  // раздельные проходы: полигоны (сортировка внутри), потом линии, потом спрайты.
-  // Иначе длинная доска со средним z «накрывает» мелкое тело на её конце.
-  const polys = [], linesArr = [], sprites = [];
-  for (const it of items) {
-    if (it.k === "p") polys.push(it);
-    else if (it.k === "l") linesArr.push(it);
-    else sprites.push(it);
-  }
-  paintItems(polys); paintItems(linesArr); paintItems(sprites);
-}
-
-/* ============ ЗВУК (WebAudio-синтез) ============ */
+/* ---------- звук (WebAudio-синтез, как раньше) ---------- */
 let AC = null, master = null, soundOn = true;
 const lastSnd = { r: 0, t: 0, k: 0, g: 0 };
 function ensureAudio() {
@@ -985,7 +342,7 @@ function voice(partials, gain, dur) {
 }
 function ring(v) { const t = performance.now();
   if (t - lastSnd.r < 70) return; lastSnd.r = t;
-  const f = 640 + hash("x" + ringCount) * 30;
+  const f = 640 + (ringCount % 5) * 26;
   voice([[f, .9, 3.6, .002], [f * 2, .4, 2.7, .002], [f * 2.4, .3, 2, .002],
          [f * 3, .2, 1.5, .002], [f * 4.5, .12, 1, .002]],
     .22 + .3 * Math.min(v / 3, 1), 4); }
@@ -1001,138 +358,483 @@ function glassTap(v) { const t = performance.now();
   if (t - lastSnd.g < 80) return; lastSnd.g = t;
   voice([[2400, .5, .012, .001], [1200, .3, .02, .001]], .1 + .15 * v, .06); }
 
-/* ============ МЫШЬ / КАМЕРА ============ */
-const hint = document.getElementById("hint");
-const DEVK = () => { const r = cv.getBoundingClientRect();
-  return { x: r.width ? cv.width / r.width : 1, y: r.height ? cv.height / r.height : 1 }; };
-function mousePlan(cxp, cyp) {
-  const k = DEVK(), sx = cxp * k.x, sy = cyp * k.y;
-  const rx = (sx - cv.width / 2) / cam.f, ry = (cv.height / 2 - sy) / cam.f;
-  const dir = { x: cam.rgt.x * rx + cam.upv.x * ry + cam.fwd.x,
-                y: cam.rgt.y * rx + cam.upv.y * ry + cam.fwd.y,
-                z: cam.rgt.z * rx + cam.upv.z * ry + cam.fwd.z };
-  if (Math.abs(dir.y) < 1e-6) return null;
-  const t = -cam.eye.y / dir.y;
-  if (t <= 0) return null;
-  return { x: cam.eye.x + dir.x * t, z: cam.eye.z + dir.z * t };
+/* ---------- three.js: материалы ---------- */
+const T = THREE;
+function canvasTex(size, draw) {
+  const c = document.createElement("canvas"); c.width = c.height = size;
+  draw(c.getContext("2d"), size);
+  const t = new T.CanvasTexture(c);
+  t.colorSpace = T.SRGBColorSpace;
+  t.wrapS = t.wrapT = T.RepeatWrapping;
+  t.anisotropy = 4;
+  return t;
 }
-function pick(cxp, cyp) {
-  const k = DEVK(), px = cxp * k.x, py = cyp * k.y;
-  let best = null, bestD = 1e9;
-  for (const b of bodies) {
-    if (b.isStatic) continue;
-    const s = cam.project({ x: b.pos.x, y: 0, z: b.pos.z });
-    if (!s) continue;
-    const bb = bodyAABB(b, 0);
-    const ext = Math.max(bb.x1 - bb.x0, bb.z1 - bb.z0) / 2 + .03;
-    const rad = ext * cam.f / s.d * .95 + 12;
-    if (Math.hypot(px - s.x, py - s.y) < rad && s.d < bestD) { bestD = s.d; best = b; }
-  }
-  return best;
+function woodTex(base, dark, light, rings) {  // продольные волокна
+  return canvasTex(512, (g, s) => {
+    g.fillStyle = base; g.fillRect(0, 0, s, s);
+    for (let i = 0; i < rings; i++) {
+      const y = (i / rings) * s + (Math.random() - .5) * 8;
+      g.strokeStyle = Math.random() < .5 ? dark : light;
+      g.globalAlpha = .12 + Math.random() * .22;
+      g.lineWidth = 1 + Math.random() * 2.5;
+      g.beginPath();
+      g.moveTo(0, y);
+      for (let x = 0; x <= s; x += 32)
+        g.lineTo(x, y + Math.sin(x * .02 + i) * 3 + (Math.random() - .5) * 4);
+      g.stroke();
+    }
+    g.globalAlpha = .1;
+    for (let i = 0; i < 40; i++) {  // крапинки
+      g.fillStyle = dark;
+      g.fillRect(Math.random() * s, Math.random() * s, 2, 1 + Math.random() * 3);
+    }
+    g.globalAlpha = 1;
+  });
 }
-let drag = null;
-cv.addEventListener("pointerdown", e => {
-  ensureAudio(); hint.classList.add("gone");
-  cv.setPointerCapture(e.pointerId);
-  const r = cv.getBoundingClientRect();
-  const px = e.clientX - r.left, py = e.clientY - r.top;
-  const hit = pick(px, py);
-  const mp = mousePlan(px, py);
-  if (hit && mp) {
-    drag = { mode: "body", body: hit };
-    hit.grabbed = { ox: hit.pos.x - mp.x, oz: hit.pos.z - mp.z, tx: mp.x, tz: mp.z };
-    hit.vel = { x: 0, z: 0 };
-  } else drag = { mode: "cam", sx: e.clientX, sy: e.clientY, az: cam.azim, el: cam.elev };
-  cv.className = drag.mode === "body" ? "drag" : "";
-});
-cv.addEventListener("pointermove", e => {
-  const r = cv.getBoundingClientRect();
-  const px = e.clientX - r.left, py = e.clientY - r.top;
-  if (!drag) {
-    const hit = pick(px, py);
-    for (const b of bodies) b.hover = b === hit;
-    cv.className = hit ? "hover" : "";
-    return;
-  }
-  if (drag.mode === "cam") {
-    cam.azim = drag.az + (e.clientX - drag.sx) * .005;
-    cam.elev = clamp(drag.el + (e.clientY - drag.sy) * .004, .07, 1.25);
-  } else {
-    const b = drag.body, mp = mousePlan(px, py);
-    if (!mp) return;
-    b.grabbed.tx = mp.x; b.grabbed.tz = mp.z;
-    if (!running) { b.pos = { x: mp.x - b.grabbed.ox, z: mp.z - b.grabbed.oz }; b.vel = { x: 0, z: 0 }; }
-  }
-});
-function endDrag() {
-  if (drag && drag.mode === "body") {
-    drag.body.grabbed = null;
-    if (!running) drag.body.vel = { x: 0, z: 0 };
-  }
-  drag = null; cv.className = "";
+function floorTex() {  // дощатый пол с продольными досками
+  return canvasTex(1024, (g, s) => {
+    const planks = 8, ph = s / planks;
+    for (let p = 0; p < planks; p++) {
+      const shade = 0.9 + Math.random() * 0.2;
+      g.fillStyle = `rgb(${198 * shade | 0},${161 * shade | 0},${119 * shade | 0})`;
+      g.fillRect(0, p * ph, s, ph - 2);
+      g.fillStyle = "rgba(120,85,55,.55)"; g.fillRect(0, p * ph + ph - 2, s, 2); // шов
+      for (let i = 0; i < 14; i++) {  // волокна доски
+        const y = p * ph + 6 + Math.random() * (ph - 14);
+        g.strokeStyle = Math.random() < .6 ? "rgba(130,92,60,.28)" : "rgba(226,197,154,.3)";
+        g.lineWidth = 1 + Math.random() * 1.6;
+        g.beginPath(); g.moveTo(0, y);
+        for (let x = 0; x <= s; x += 48) g.lineTo(x, y + Math.sin(x * .015 + p) * 3);
+        g.stroke();
+      }
+      const jx = Math.random() * s;   // поперечный стык
+      g.fillStyle = "rgba(125,92,60,.5)"; g.fillRect(jx, p * ph, 2, ph - 2);
+    }
+  });
 }
-cv.addEventListener("pointerup", endDrag);
-cv.addEventListener("pointercancel", endDrag);
-cv.addEventListener("wheel", e => {
-  e.preventDefault();
-  cam.dist = clamp(cam.dist * (e.deltaY > 0 ? 1.09 : .92), 2.0, 12);
-}, { passive: false });
+const MAT = {};
+function makeMaterials() {
+  const wood = woodTex("#b1793f", "#7c5228", "#d9a96a", 22);
+  const woodD = woodTex("#8a5a2e", "#5c3a1a", "#b1793f", 26);
+  MAT.wood  = new T.MeshStandardMaterial({ map: wood, roughness: .72, metalness: 0 });
+  MAT.woodD = new T.MeshStandardMaterial({ map: woodD, roughness: .78, metalness: 0 });
+  MAT.pine  = new T.MeshStandardMaterial({ map: woodTex("#d9a96a", "#a06a32", "#f0d0a0", 18), roughness: .68 });
+  MAT.floor = new T.MeshStandardMaterial({ map: floorTex(), roughness: .8 });
+  MAT.floor.map.repeat.set(3, 3);
+  MAT.steel = new T.MeshStandardMaterial({ color: 0xd6dde6, metalness: 1, roughness: .22,
+    envMapIntensity: 1.3 });
+  MAT.glass = new T.MeshPhysicalMaterial({ color: 0xdff2ff, metalness: .1, roughness: .05,
+    transmission: .55, thickness: .06, ior: 1.5, transparent: true, opacity: .92,
+    envMapIntensity: 3, clearcoat: 1, clearcoatRoughness: .04 });
+  MAT.brass = new T.MeshStandardMaterial({ color: 0xd9a44f, metalness: 1, roughness: .22,
+    envMapIntensity: 1.6 });
+  MAT.brassD = new T.MeshStandardMaterial({ color: 0x9a7226, metalness: 1, roughness: .45 });
+  MAT.ivory = new T.MeshStandardMaterial({ color: 0xefe6d3, roughness: .5 });
+  MAT.pip   = new T.MeshStandardMaterial({ color: 0x3a3226, roughness: .6 });
+  MAT.thread = new T.MeshStandardMaterial({ color: 0x5c4a2e, roughness: .9 });
+}
 
-/* ============ HUD / ЦИКЛ ============ */
-const hudEvent = document.getElementById("hudEvent");
-const hudStats = document.getElementById("hudStats");
-const btnRun = document.getElementById("btnRun"), btnPause = document.getElementById("btnPause"),
-      btnReset = document.getElementById("btnReset"), btnSound = document.getElementById("btnSound");
+/* ---------- three.js: сцена ---------- */
+let scene, camera, renderer, controls, raycaster, pickPlane;
+const syncList = [];   // {group, body}
+const threads = [];    // {mesh, anchor(T.Vector3), body}
+let bgGroup;
+
+function meshBox(w, h, d, mat, castShadow = true) {
+  const m = new T.Mesh(new T.BoxGeometry(w, h, d), mat);
+  m.castShadow = castShadow; m.receiveShadow = true;
+  return m;
+}
+function groupFor(b) {  // группа, позиция/поворот которой синхронизируется с телом
+  const g = new T.Group();
+  scene.add(g);
+  syncList.push({ group: g, body: b.body });
+  return g;
+}
+function threadMesh(ax, ay, body, r) {
+  const m = new T.Mesh(new T.CylinderGeometry(r, r, 1, 6), MAT.thread);
+  m.castShadow = false;
+  scene.add(m);
+  threads.push({ mesh: m, anchor: new T.Vector3(ax, ay, 0), body });
+  return m;
+}
+
+function buildScene3D() {
+  scene = new T.Scene();
+  scene.background = new T.Color(0xf0e9db);
+
+  camera = new T.PerspectiveCamera(40, innerWidth / innerHeight, 0.05, 60);
+  camera.position.set(3.6, 2.0, 3.4);
+  camera.lookAt(2.1, 0.45, 0);
+
+  renderer = new T.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = T.PCFShadowMap;
+  renderer.toneMapping = T.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  document.getElementById("stage").appendChild(renderer.domElement);
+  renderer.domElement.id = "cv";
+
+  controls = new T.OrbitControls(camera, renderer.domElement);
+  controls.target.set(2.1, 0.45, 0);
+  controls.enableDamping = true; controls.dampingFactor = .08;
+  controls.minDistance = 1.4; controls.maxDistance = 14;
+  controls.maxPolarAngle = 1.5;
+
+  /* свет: тёплое солнце + небо + отражения комнаты */
+  const hemi = new T.HemisphereLight(0xfff6e8, 0x8a7a5e, .55);
+  scene.add(hemi);
+  const sun = new T.DirectionalLight(0xffeedd, 2.6);
+  sun.position.set(-3.2, 6.5, 4.2);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.left = -3; sun.shadow.camera.right = 5.5;
+  sun.shadow.camera.top = 4; sun.shadow.camera.bottom = -2;
+  sun.shadow.camera.near = 1; sun.shadow.camera.far = 20;
+  sun.shadow.bias = -0.0004;
+  scene.add(sun);
+  const pmrem = new T.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), .04).texture;
+
+  raycaster = new T.Raycaster();
+  pickPlane = new T.Plane(new T.Vector3(0, 0, 1), 0);   // плоскость машины z=0
+
+  /* пол */
+  const floorMesh = new T.Mesh(new T.BoxGeometry(12, 0.04, 6), MAT.floor);
+  floorMesh.position.set(2.2, -0.02, 0);
+  floorMesh.receiveShadow = true;
+  scene.add(floorMesh);
+
+  /* статика машины: доски (глубина по Z ± dep/2) */
+  bgGroup = new T.Group(); scene.add(bgGroup);
+  const board = (name, w, h, mat) => {
+    const b = byName[name], t = b.translation(), d = b.userData2 ?? 0;
+    const info = bodies.find(x => x.name === name);
+    const m = meshBox(w, h, info ? info.dep : 0.16, mat);
+    m.position.set(t.x, t.y, 0);
+    m.rotation.z = b.rotation();
+    bgGroup.add(m);
+    return m;
+  };
+  board("ramp", RAMP_L, 0.016, MAT.wood);
+  board("runway", 0.11, 0.02, MAT.wood);
+  { const m = meshBox(0.60, 0.02, 0.16, MAT.wood);   // наклонная домино-зона
+    const b = byName.runway2, t = b.translation();
+    m.position.set(t.x, t.y, 0); m.rotation.z = b.rotation(); bgGroup.add(m); }
+  board("chute", CHUTE_DX, 0.012, MAT.wood);
+  board("crossbar", 0.9, 0.04, MAT.woodD);
+
+  /* опоры: козлы под горкой, ножки столов, стойки жёлоба, портал */
+  const leg = (x, h, d = 0.036, mat = MAT.woodD) => {
+    const m = meshBox(d, h, d, mat);
+    m.position.set(x, h / 2, 0);
+    bgGroup.add(m);
+  };
+  for (const lx of [0.25, 0.57, 0.87]) leg(lx, rampY(lx) - 0.008);       // козлы горки
+  leg(0.985, 0.55, 0.05); leg(1.50, 0.55, 0.05);                          // ножки стола
+  for (const lx of [1.98, 2.42]) leg(lx, chuteY(lx) - 0.006, 0.03);       // стойки жёлоба
+  leg(2.78, 0.54, 0.05); leg(3.55, 0.54, 0.05);                           // портал
+  { const cap = meshBox(0.9, 0.045, 0.06, MAT.wood);                      // перекладина поверх
+    cap.position.set(3.16, 0.565, 0); bgGroup.add(cap);
+    for (const ax of [3.06, 3.25]) {   // кронштейны подвесов на перекладине
+      const ring = new T.Mesh(new T.TorusGeometry(0.016, 0.005, 10, 24), MAT.brass);
+      ring.position.set(ax, 0.59, 0); ring.castShadow = true;
+      bgGroup.add(ring);
+    } }
+  const crossbarM = bgGroup.children.find(m => Math.abs(m.position.x - 3.16) < .01 && Math.abs(m.position.y - .56) < .02);
+  if (crossbarM) crossbarM.visible = false;   // физический брус скрыт, видим декоративный
+
+  /* стальной шар */
+  { const g = groupFor(bodies.find(b => b.name === "ball"));
+    const m = new T.Mesh(new T.SphereGeometry(0.04, 48, 32), MAT.steel);
+    m.castShadow = true; g.add(m); g.userData.pick = byName.ball; }
+
+  /* домино: плашка + пипы 2+1 с обеих сторон */
+  for (let i = 0; i < TILE_N; i++) {
+    const info = bodies.find(b => b.name === "dom" + i);
+    const g = groupFor(info);
+    const plate = meshBox(0.008, 0.19, 0.05, MAT.ivory);
+    plate.position.y = -0.012;   // ЦМ ниже геометрии
+    g.add(plate);
+    g.userData.pick = info.body;
+    const pipGeo = new T.CylinderGeometry(0.0035, 0.0035, 0.0012, 12);
+    for (const zc of [0.026, -0.026]) for (const py of [0.028, 0.006, -0.052]) {
+      const p = new T.Mesh(pipGeo, MAT.pip);
+      p.rotation.x = Math.PI / 2;
+      p.position.set(0, py - 0.012, zc);
+      p.castShadow = false;
+      g.add(p);
+    }
+  }
+
+  /* стеклянный шарик */
+  { const g = groupFor(bodies.find(b => b.name === "marble"));
+    const m = new T.Mesh(new T.SphereGeometry(0.02, 36, 24), MAT.glass);
+    m.castShadow = true; g.add(m); g.userData.pick = byName.marble; }
+
+  /* молот-маятник: голова + палка до оси; нить-ось */
+  { const info = bodies.find(b => b.name === "mallet");
+    const g = groupFor(info);
+    const head = meshBox(0.16, 0.32, 0.04, MAT.pine);
+    g.add(head);
+    // палка: от верха головы (0.44) до оси (0.80) — точно, без протыкания
+    const stick = new T.Mesh(new T.CylinderGeometry(0.007, 0.007, 0.36, 12), MAT.woodD);
+    stick.position.set(0, 0.62, 0);
+    stick.castShadow = true;
+    g.add(stick);
+    // латунная окантовка головы — как у настоящего молоточка
+    const band = new T.Mesh(new T.CylinderGeometry(0.083, 0.083, 0.045, 24, 1, true), MAT.brass);
+    band.rotation.x = Math.PI / 2; band.castShadow = true;
+    g.add(band);
+    g.userData.pick = byName.mallet;
+    threadMesh(3.06, 0.80, byName.mallet, 0.003);
+    const axis = new T.Mesh(new T.CylinderGeometry(0.012, 0.012, 0.09, 16), MAT.brassD);
+    axis.rotation.x = Math.PI / 2; axis.position.set(3.06, 0.80, 0);
+    bgGroup.add(axis);
+  }
+
+  /* колокол: профиль-оболочка (Lathe) + изнутри страйкеры */
+  { const info = bodies.find(b => b.name === "bell");
+    const g = groupFor(info);
+    const prof = [[0, -0.072], [.049, -.07], [.048, -.05], [.043, -.03], [.037, -.01],
+                   [.033, .01], [.028, .03], [.026, .05], [.012, .052], [0, .052]]
+      .map(([r, y]) => new T.Vector2(Math.max(r, 0.0001), y));
+    const bellM = new T.Mesh(new T.LatheGeometry(prof, 40), MAT.brass);
+    bellM.castShadow = true;
+    g.add(bellM);
+    const inner = new T.Mesh(new T.LatheGeometry(prof, 32),
+      new T.MeshStandardMaterial({ color: 0x6b4d18, metalness: 1, roughness: .6, side: T.BackSide }));
+    g.add(inner);
+    g.userData.pick = byName.bell;
+    threadMesh(3.25, 1.02, byName.bell, 0.002);
+    const axis = new T.Mesh(new T.CylinderGeometry(0.012, 0.012, 0.10, 16), MAT.brassD);
+    axis.rotation.x = Math.PI / 2; axis.position.set(3.25, 1.02, 0);
+    bgGroup.add(axis);
+  }
+
+  /* страйкеры */
+  for (const nm of ["strikerL", "strikerR"]) {
+    const info = bodies.find(b => b.name === nm);
+    const g = groupFor(info);
+    const m = new T.Mesh(new T.SphereGeometry(0.0135, 28, 20), MAT.brass);
+    m.castShadow = true; g.add(m);
+    g.userData.pick = info.body;
+    threadMesh(info.home.x, info.home.y + 0.25, info.body, 0.0012);
+    const axis = new T.Mesh(new T.CylinderGeometry(0.011, 0.011, 0.085, 14), MAT.brass);
+    axis.rotation.x = Math.PI / 2;
+    axis.position.set(info.home.x, info.home.y + 0.25, 0);
+    bgGroup.add(axis);
+  }
+
+  addEventListener("resize", onResize);
+  onResize();
+}
+function onResize() {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+}
+
+/* ---------- синк физика → рендер ---------- */
+function sync3D() {
+  for (const s of syncList) {
+    const t = s.body.translation();
+    s.group.position.set(t.x, t.y, 0);
+    s.group.rotation.z = s.body.rotation();
+  }
+  for (const th of threads) {
+    const t = th.body.translation();
+    const from = th.anchor, to = new T.Vector3(t.x, t.y, 0);
+    const dir = to.clone().sub(from);
+    const len = dir.length();
+    th.mesh.position.copy(from).addScaledVector(dir, .5);
+    th.mesh.scale.set(1, Math.max(len, .001), 1);
+    th.mesh.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), dir.normalize());
+  }
+}
+
+/* ---------- UI / HUD / drag ---------- */
+const $ = id => document.getElementById(id);
 function updateHUD() {
+  window.__simT = simT; window.__ringCount = ringCount;
   if (running) {
-    if (!flags.roll && len(ball.vel) > .25) { flags.roll = 1; lastEvent = "шар покатился"; }
-    if (!flags.fly && marble.pos.x > 1.78) { flags.fly = 1; lastEvent = "шарик в полёте"; }
-    if (!flags.dom && dominoFell.size === TILE_N) { flags.dom = 1; lastEvent = "все домино легли"; }
+    const bl = byName.ball, mb = byName.marble;
+    if (!flags.roll && Math.hypot(bl.linvel().x, bl.linvel().y) > .25) { flags.roll = 1; lastEvent = "шар покатился"; }
+    if (!flags.fly && mb.translation().x > 1.62) { flags.fly = 1; lastEvent = "шарик с обрыва"; }
+    if (!flags.dom && dominoFell === TILE_N) { flags.dom = 1; lastEvent = "все домино легли"; }
   }
-  hudEvent.textContent = lastEvent;
-  hudEvent.className = lastEvent === "нажмите «Запуск»" ? "err" : "";
-  hudStats.textContent =
-    `t ${simT.toFixed(1)}с · колокол ${(Math.abs(bell.angle) * 180 / Math.PI).toFixed(0)}° · звонков ${ringCount}`;
+  $("hudEvent").textContent = lastEvent;
+  $("hudEvent").className = lastEvent.startsWith("нажмите") ? "err" : "";
+  const bellA = Math.abs(byName.bell.rotation()) * 180 / Math.PI;
+  $("hudStats").textContent =
+    `t ${simT.toFixed(1)}с · колокол ${bellA.toFixed(0)}° · звонков ${ringCount}`;
 }
-btnRun.onclick = () => { ensureAudio(); reset(); running = true; lastEvent = "опыт пошёл"; updateHUD(); };
-btnReset.onclick = () => { reset(); draw(); };
-btnPause.onclick = () => {
-  if (simT === 0) return;
-  running = !running; lastEvent = running ? "продолжаем" : "пауза"; updateHUD();
-};
-btnSound.onclick = () => { soundOn = !soundOn; btnSound.classList.toggle("off", !soundOn); if (soundOn) ensureAudio(); };
-addEventListener("keydown", e => {
-  if (e.code === "Space") { e.preventDefault(); btnPause.onclick(); }
-  if (e.code === "KeyR") btnReset.onclick();
-  if (e.code === "Enter") btnRun.onclick();
-});
-
-let lastT = performance.now(), acc = 0;
+let paused = false;
 function frame(t) {
-  const dt = Math.min((t - lastT) / 1000, .1); lastT = t;
-  if (running) {
-    acc += dt; let n = 0;
-    while (acc >= DT && n < 14) { substep(DT); simT += DT; acc -= DT; n++; }
-    if (n >= 14) acc = 0;
-  }
-  draw();
-  if ((frame.n = (frame.n || 0) + 1) % 5 === 0) updateHUD();
   requestAnimationFrame(frame);
+  const dt = Math.min((t - (frame.last || t)) / 1000, .1); frame.last = t;
+  if (running && !paused) {
+    acc += dt; let n = 0;
+    while (acc >= DT && n < 12) { stepOnce(); acc -= DT; n++; }
+    if (n >= 12) acc = 0;
+  }
+  window.__camAz = controls.getAzimuthalAngle();
+  sync3D();
+  controls.update();
+  if ((frame.k = (frame.k || 0) + 1) % 6 === 0) updateHUD();
+  renderer.render(scene, camera);
 }
-resize(); reset(); draw();
-requestAnimationFrame(frame);
+let acc = 0;
 
-if (location.search.includes("test")) {  // автотестовый режим
-  soundOn = false;
-  setInterval(() => {
-    document.title = `TEST t=${simT.toFixed(1)} rings=${ringCount} dom=${dominoFell.size}`;
-    window.__test = { t: simT, rings: ringCount, dominoes: dominoFell.size,
-      ball: { ...ball.pos }, marble: { ...marble.pos },
-      bell: bell.angle, mallet: mallet.angle, clapper: clapper.angle };
-  }, 250);
+/* drag тел: клик по мешу → кинематика до отпускания */
+let drag = null;
+function pointerToWorld(e) {
+  const r = renderer.domElement.getBoundingClientRect();
+  const nx = (e.clientX - r.left) / r.width * 2 - 1;
+  const ny = -((e.clientY - r.top) / r.height * 2 - 1);
+  raycaster.setFromCamera({ x: nx, y: ny }, camera);
+  const p = new T.Vector3();
+  raycaster.ray.intersectPlane(pickPlane, p);
+  return p;
 }
+function pickBody(e) {
+  const r = renderer.domElement.getBoundingClientRect();
+  const nx = (e.clientX - r.left) / r.width * 2 - 1;
+  const ny = -((e.clientY - r.top) / r.height * 2 - 1);
+  raycaster.setFromCamera({ x: nx, y: ny }, camera);
+  const hits = raycaster.intersectObjects(scene.children, true);
+  for (const h of hits) {
+    let o = h.object;
+    while (o && !o.userData.pick) o = o.parent;
+    if (o && o.userData.pick) return o.userData.pick;
+  }
+  return null;
+}
+function enableEvents() {
+  const cv = renderer.domElement;
+  cv.addEventListener("pointerdown", e => {
+    ensureAudio(); $("hint").classList.add("gone");
+    const body = pickBody(e);
+    window.__dragBody = body || null;
+    if (body) {
+      const w = pointerToWorld(e);
+      const t = body.translation();
+      controls.enabled = false;
+      body.setBodyType(R.RigidBodyType.KinematicPositionBased, true);
+      body.setTranslation({ x: w.x, y: w.y }, true);
+      body.setLinvel({ x: 0, y: 0 }, true);
+      body.setAngvel(0, true);
+      drag = { body, last: { x: w.x, y: w.y, t: performance.now() }, vel: { x: 0, y: 0 } };
+      cv.setPointerCapture(e.pointerId);
+      cv.style.cursor = "grabbing";
+    }
+  });
+  cv.addEventListener("pointermove", e => {
+    if (!drag) return;
+    const w = pointerToWorld(e);
+    if (!w) return;
+    const now = performance.now(), dt = Math.max((now - drag.last.t) / 1000, .008);
+    drag.vel = { x: (w.x - drag.last.x) / dt, y: (w.y - drag.last.y) / dt };
+    drag.last = { x: w.x, y: w.y, t: now };
+    drag.body.setTranslation({ x: w.x, y: w.y }, true);
+  });
+  const drop = () => {
+    if (!drag) return;
+    const v = drag.vel;
+    const sp = Math.hypot(v.x, v.y);
+    const cl = sp > 4 ? 4 / sp : 1;
+    drag.body.setBodyType(R.RigidBodyType.Dynamic, true);
+    drag.body.setLinvel({ x: v.x * cl, y: v.y * cl }, true);
+    drag.body.setAngvel(0, true);
+    drag = null;
+    window.__dragBody = null;
+    controls.enabled = true;
+    cv.style.cursor = "grab";
+  };
+  cv.addEventListener("pointerup", drop);
+  cv.addEventListener("pointercancel", drop);
+}
+function bindUI() {
+  $("btnRun").onclick = () => { ensureAudio(); reset(); running = true; paused = false; lastEvent = "опыт пошёл"; updateHUD(); };
+  $("btnReset").onclick = () => { running = false; paused = false; acc = 0; reset(); sync3D(); updateHUD(); };
+  $("btnPause").onclick = () => { if (simT === 0) return; paused = !paused; lastEvent = paused ? "пауза" : "продолжаем"; updateHUD(); };
+  $("btnSound").onclick = () => { soundOn = !soundOn; $("btnSound").classList.toggle("off", !soundOn); if (soundOn) ensureAudio(); };
+  addEventListener("keydown", e => {
+    if (e.code === "Space") { e.preventDefault(); $("btnPause").onclick(); }
+    if (e.code === "KeyR") $("btnReset").onclick();
+    if (e.code === "Enter") $("btnRun").onclick();
+  });
+}
+
+/* ---------- тест-режим (?test=1): быстрый прогон без рендера ---------- */
+function fastForward(seconds) {
+  const n = Math.round(seconds / DT);
+  for (let i = 0; i < n; i++) stepOnce();
+}
+function exportTest() {
+  const bl = byName.ball, mb = byName.marble;
+  return {
+    t: +simT.toFixed(2), rings: ringCount, dominoes: dominoFell,
+    ball: { x: +bl.translation().x.toFixed(3), y: +bl.translation().y.toFixed(3),
+            ke: +(0.5 * 2.1 * (bl.linvel().x ** 2 + bl.linvel().y ** 2)).toFixed(4) },
+    marble: { x: +mb.translation().x.toFixed(3), y: +mb.translation().y.toFixed(3) },
+    bellDeg: +(byName.bell.rotation() * 180 / Math.PI).toFixed(1),
+    bellPeak: +((window.__peakBell) || 0).toFixed(1),
+    bellAV: +byName.bell.angvel().toFixed(3),
+    malletDeg: +(byName.mallet.rotation() * 180 / Math.PI).toFixed(1),
+    malletAV: +byName.mallet.angvel().toFixed(3),
+    strikerL: +(byName.strikerL.rotation() * 180 / Math.PI).toFixed(1),
+    strikerR: +(byName.strikerR.rotation() * 180 / Math.PI).toFixed(1),
+    sane: bodies.every(b => b.fixed || (Number.isFinite(b.body.translation().x)
+      && Number.isFinite(b.body.rotation()) && b.body.translation().x > -3
+      && b.body.translation().x < 12 && b.body.translation().y > -3 && b.body.translation().y < 8)),
+  };
+}
+
+/* ---------- запуск ---------- */
+(async () => {
+  try {
+    const bytes = Uint8Array.from(atob(globalThis.RAPIER_WASM_B64), c => c.charCodeAt(0));
+    R = globalThis.RAPIER;
+    await R.init({ module: bytes });
+    buildWorld();
+    makeMaterials();
+    buildScene3D();
+    enableEvents();
+    bindUI();
+    reset();
+    $("load").classList.add("gone");
+    lastEvent = "нажмите «Запуск»";
+    updateHUD();
+    window.__ready = true;
+    window.__cam = camera; window.__scene = scene;
+    window.__homeBall = { x: HOME.ball.x, y: HOME.ball.y };
+    window.__dbg = { world, byName, stepOnce, bodies,
+      pos: n => byName[n].translation(), rot: n => byName[n].rotation() };
+    requestAnimationFrame(frame);
+
+    if (location.search.includes("test")) {
+      soundOn = false;
+      const params = new URLSearchParams(location.search);
+      if (params.get("autorun")) { reset(); running = true; fastForward(+params.get("autorun") || 16); }
+      window.__test = exportTest();
+      setInterval(() => {
+        window.__test = exportTest();
+        document.title = `TEST t=${simT.toFixed(1)} rings=${ringCount} dom=${dominoFell}`;
+      }, 250);
+    }
+  } catch (e) {
+    console.error(e);
+    const el = $("hudEvent");
+    if (el) { el.textContent = "ОШИБКА ЗАГРУЗКИ: " + e.message; el.className = "err"; }
+    document.title = "JSERR " + e.message;
+  }
+})();
 window.onerror = m => {
-  hudEvent.textContent = "ОШИБКА: " + m; hudEvent.className = "err";
+  const el = document.getElementById("hudEvent");
+  if (el) { el.textContent = "ОШИБКА: " + m; el.className = "err"; }
   document.title = "JSERR " + m;
   return false;
 };
