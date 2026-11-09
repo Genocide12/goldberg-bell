@@ -93,7 +93,7 @@ const DT = 1 / 240;
 /* ---------- сцена (метры, из проверенной 12/12 конфигурации) ---------- */
 const RAMP_TOP = { x: 0.10, y: 0.94 }, RAMP_A = 22 * Math.PI / 180, RAMP_L = 0.92;
 const CHUTE_DZ = 0.318, CHUTE_DX = 1.364, CHUTE_A = Math.atan2(CHUTE_DZ, CHUTE_DX);
-const CHUTE_X0 = 1.585, CHUTE_Y0 = 0.578;   // верх жёлоба — вплотную под обрывом зоны (1.56@0.575)
+const CHUTE_X0 = 1.545, CHUTE_Y0 = 0.562;   // жёлоб заходит ПОД кромку стола на 15 мм (как в эталоне), верх — на 8 мм ниже зоны
 const TILE_N = 8, TILE_STEP = 0.055, TILE0 = 0.985;
 const ZONE2_A = -0.0175;                    // уклон зоны к обрыву 1.0° (плашки устойчивы)
 const zone2Y = x => 0.575 - (x - 1.26) * 0.0175;  // поверхность домино-зоны
@@ -107,7 +107,7 @@ const HOME = {
     return { x: 0.16, y: ySurf + 0.04 * Math.cos(RAMP_A) + 0.002, rot: 0 };
   })(),
   domino: i => ({ x: TILE0 + i * TILE_STEP, y: zone2Y(TILE0 + i * TILE_STEP) + 0.107, rot: ZONE2_A }),
-  marble: { x: 1.43, y: zone2Y(1.43) + 0.021, rot: 0 },
+  marble: { x: 1.52, y: zone2Y(1.52) + 0.021, rot: 0 },   // у самой кромки: короткий толчок волны — сразу сход
   mallet: { x: 3.06, y: 0.28, rot: 0 },
   bell:   { x: 3.25, y: 0.42, rot: 0 },     // юбка от 3.201: зазор 2 см от головы молота (до 3.18)
   strikerL: { x: 3.185, y: 0.35, rot: 0 },   // вплотную к юбке (3.201-0.012-4мм)
@@ -168,7 +168,9 @@ function buildWorld() {
   // (полка-разгон убрана: её перекрыла домино-зона на 1 см выше — шар идёт с горки сразу на зону)
   stdBody({ name: "runway2", kind: "runway", fixed: true, x: 1.26, y: 0.565,
     rot: ZONE2_A, dep: 0.16,
-    colliders: [{ hx: 0.30, hy: 0.01, density: 1, fr: 0.9, rest: 0.1 }] });        // домино-зона «липкая», обрыв 1.56
+    colliders: [{ hx: 0.30, hy: 0.01, density: 1, fr: 0.9, rest: 0.1 }] });        // домино-зона «липкая» (эталон): волна успевает падать
+  stdBody({ name: "curb", kind: "curb", fixed: true, x: 4.35, y: 0.03, dep: 0.5,
+    colliders: [{ hx: 0.015, hy: 0.03, density: 1, fr: 0.4, rest: 0.3 }] });   // упор для скатившихся
   stdBody({ name: "chute", kind: "chute", fixed: true,
     x: CHUTE_X0 + Math.cos(CHUTE_A) * (CHUTE_DX / 2),   // верх доски в (CHUTE_X0, CHUTE_Y0)
     y: CHUTE_Y0 - Math.sin(CHUTE_A) * (CHUTE_DX / 2),
@@ -178,7 +180,7 @@ function buildWorld() {
 
   /* стальной шар Ø80 мм, 2,1 кг (сталь 7850: площадь πr² → density 410) */
   stdBody({ name: "ball", kind: "ball", x: HOME.ball.x, y: HOME.ball.y, dep: 0.08,
-    ldamp: 0.05, adamp: 2.5, ccd: true,  // 2.5: сталь по дереву — заметное сопротивление качению
+    ldamp: 0.05, adamp: 2.5, ccd: true,  // 2.5: сталь по дереву — заметное сопротивление качению (эталон)
     colliders: [{ ball: true, r: 0.04, density: 410, fr: 0.22, rest: 0.12, events: true }] });
 
   /* домино МДФ 190×50×8 мм, 58 г (720 кг/м³): плашка с ЦМ на 12 мм ниже геометрии */
@@ -191,14 +193,14 @@ function buildWorld() {
 
   /* стеклянный шарик Ø40 мм, 84 г (стекло 2500: density 66.4) */
   stdBody({ name: "marble", kind: "marble", x: HOME.marble.x, y: HOME.marble.y, dep: 0.04,
-    ldamp: 0.03, adamp: 0.25, ccd: true,  // стекло катится легче
+    ldamp: 0.02, adamp: 0.12, ccd: true,  // стекло катится почти без потерь
     colliders: [{ ball: true, r: 0.02, density: 66.4, fr: 0.05, rest: 0.15, events: true }] });
 
   /* маятник-молот: голова сосны 240×320 (146 г) + палка (4 г); ось на 0.80 */
   stdBody({ name: "mallet", kind: "mallet", x: HOME.mallet.x, y: HOME.mallet.y, dep: 0.04,
     ldamp: 0.03, adamp: 0.06,
     colliders: [
-      { hx: 0.08, hy: 0.16, density: 4.3, fr: 0.2, rest: 0.45, events: true },          // голова 160×320×40, 150 г
+      { hx: 0.08, hy: 0.16, density: 3.2, fr: 0.2, rest: 0.45, events: true },          // голова полегче: шарик 84 г раскачивает её шире
       { hx: 0.005, hy: 0.025, oy: 0.185, density: 2, fr: 0.2, rest: 0.3 },              // рычаг у головы
     ] });
   pivotTo(3.06, 0.80, byName.mallet, 0, 0.52);
@@ -237,9 +239,14 @@ function reset() {
     b.body.setRotation(h.rot || 0, true);
     b.body.setLinvel({ x: 0, y: 0 }, true);
     b.body.setAngvel(0, true);
+    if (b.kind === "domino") {   // снять «фиксацию» упавших
+      b.body.__settled = false;
+      b.body.setBodyType(R.RigidBodyType.Dynamic);
+    }
   }
   simT = 0; ringCount = 0; dominoFell = 0;
-  window.__peakBell = 0;
+  window.__peakBell = 0; window.__firstRing = 0; window.__firstTok = 0;
+  window.__ballTrail = []; window.__marbleTrail = [];
   sndState.clear();
   flags = {}; lastEvent = "нажмите «Запуск»";
 }
@@ -268,15 +275,26 @@ const sndPairs = [
   ["bell", "strikerL", "ring"], ["bell", "strikerR", "ring"],
   ["bell", "mallet", "tok"],
   ["marble", "mallet", "glass"],
-  ["ball", "dom0", "knock"], ["ball", "ramp", "knock"],
-  ["marble", "chute", "glassSoft"],
+  ["ball", "ramp", "knock"],
+  ["marble", "chute", "glassSoft"], ["ball", "runway2", "knock"],
+  ["marble", "dom7", "click"],
 ];
+for (let i = 0; i < TILE_N - 1; i++) sndPairs.push(["dom" + i, "dom" + (i + 1), "click"]);
+for (let i = 0; i < TILE_N; i++) sndPairs.push(["ball", "dom" + i, "knock"]);
 const sndState = new Map();   // key -> был ли контакт
+function touchingBodies(a, b) {   // любая пара коллайдеров двух тел (не только первые)
+  const A = byName[a], B = byName[b];
+  for (let i = 0; i < A.numColliders(); i++)
+    for (let j = 0; j < B.numColliders(); j++) {
+      let t = false;
+      world.contactPair(A.collider(i), B.collider(j), (m) => { if (m.numContacts() > 0) t = true; });
+      if (t) return true;
+    }
+  return false;
+}
 function bellRings() {
   for (const [a, b, kind] of sndPairs) {
-    const ca = byName[a].collider(0), cb = byName[b].collider(0);
-    let touching = false;
-    world.contactPair(ca, cb, (m) => { if (m.numContacts() > 0) touching = true; });
+    const touching = touchingBodies(a, b);
     const key = a + "×" + b, was = sndState.get(key) || false;
     sndState.set(key, touching);
     if (!touching || was) continue;   // только фронт
@@ -291,8 +309,17 @@ function bellRings() {
       const w = sv + av * 0.5;
       ring(Math.min(1 + w * 2.5, 4)); ringCount++;
       lastEvent = "ЗВОНОК №" + ringCount;
-    } else if (kind === "tok") { tok(vn); lastEvent = "молот бьёт в колокол"; }
+    } else if (kind === "tok") {
+      const lg = window.__tokLog = window.__tokLog || [];
+      if (lg.length < 30) lg.push([+simT.toFixed(2), +vn.toFixed(2), touching]);
+      tok(vn);
+      if (vn > 0.35) { if (!window.__firstTok) window.__firstTok = +simT.toFixed(2);   // слышимый удар — колокол звучит сразу, не ждёт страйкеров
+        ring(Math.min(1 + vn * 1.4, 4)); ringCount++;
+        lastEvent = "удар молота — ЗВОНОК №" + ringCount;
+      } else lastEvent = "молот бьёт в колокол";
+    }
     else if (kind === "glass") { glassTap(vn); lastEvent = "шарик ударил в молот"; }
+    else if (kind === "click") domClick(vn);
     else if (kind === "glassSoft") glassTap(vn * 0.6);
     else knock(vn);
   }
@@ -302,6 +329,21 @@ function stepOnce() {
   world.step();
   bellRings();
   simT += DT;
+  { // трейл шара: [t, x, |v|] каждые 0.5 с
+    const _b = byName.ball, _v = _b.linvel();
+    const _rec = [+simT.toFixed(2), +_b.translation().x.toFixed(3),
+      +Math.hypot(_v.x, _v.y).toFixed(3)];
+    const _tr = window.__ballTrail = window.__ballTrail || [];
+    if (!_tr.length || +simT.toFixed(2) - _tr[_tr.length - 1][0] >= 0.5) _tr.push(_rec);
+  }
+  { // трейл шарика
+    const _m = byName.marble, _mv = _m.linvel();
+    const _mr = [+simT.toFixed(2), +_m.translation().x.toFixed(3),
+      +_m.translation().y.toFixed(3), +Math.hypot(_mv.x, _mv.y).toFixed(3)];
+    const _mt = window.__marbleTrail = window.__marbleTrail || [];
+    if (!_mt.length || +simT.toFixed(2) - _mt[_mt.length - 1][0] >= 0.5) _mt.push(_mr);
+  }
+  if (ringCount > 0 && !window.__firstRing) window.__firstRing = +(simT - DT).toFixed(2);
   // пик колокола и звон — внутри шага
   window.__peakBell = Math.max(window.__peakBell || 0,
     Math.abs(byName.bell.rotation()) * 180 / Math.PI);
@@ -310,11 +352,26 @@ function stepOnce() {
   for (let i = 0; i < TILE_N; i++)
     if (Math.abs(byName["dom" + i].rotation()) > 0.5) fell++;
   if (fell > dominoFell) { dominoFell = fell; if (fell === 1) lastEvent = "домино пошли"; }
+  // упавшая доминошка — неподвижное препятствие (как в реале: лежачую
+  // плашку не сдвинуть катающимся шаром). Кинематизация вместо трения:
+  // плуг 2,1 кг продавливает любой damping, но не твёрдое тело.
+  for (let i = 0; i < TILE_N; i++) {
+    const d = byName["dom" + i];
+    if (d.__settled) continue;
+    const v = d.linvel(), sp = Math.hypot(v.x, v.y);
+    if (sp > 0.3) d.__awake = true;      // волна её тронула — можно фиксировать
+    if (!d.__awake) continue;            // стоячие до удара не трогаем
+    if (Math.abs(d.rotation()) > 0.785) {   // 45°: замерла, опираясь на соседку
+      d.__settled = true;
+      d.setLinvel({ x: 0, y: 0 }, true); d.setAngvel(0, true);
+      d.setBodyType(R.RigidBodyType.KinematicPositionBased);
+    }
+  }
 }
 
 /* ---------- звук (WebAudio-синтез, как раньше) ---------- */
 let AC = null, master = null, soundOn = true;
-const lastSnd = { r: 0, t: 0, k: 0, g: 0 };
+const lastSnd = { r: 0, t: 0, k: 0, g: 0, c: 0 };
 function ensureAudio() {
   if (!soundOn) return;
   if (!AC) { try {
@@ -352,6 +409,10 @@ function knock(v) { const t = performance.now();
   if (t - lastSnd.k < 90) return; lastSnd.k = t;
   voice([[170, .8, .05, .001], [95, .6, .07, .001], [400, .2, .03, .001]],
     .12 + .2 * Math.min(v / 5, 1), .12); }
+function domClick(v) { const t = performance.now();
+  if (t - lastSnd.c < 60) return; lastSnd.c = t;
+  voice([[1600, .35, .01, .001], [520, .45, .02, .001]],
+    .06 + .14 * Math.min(v / 3, 1), .05); }
 function glassTap(v) { const t = performance.now();
   if (t - lastSnd.g < 80) return; lastSnd.g = t;
   voice([[2400, .5, .012, .001], [1200, .3, .02, .001]], .1 + .15 * v, .06); }
@@ -576,10 +637,10 @@ function buildScene3D() {
     plate.position.y = -0.012;   // ЦМ ниже геометрии
     g.add(plate);
     g.userData.pick = info.body;
-    const div = meshBox(0.011, 0.002, 0.05, MAT.pip);   // риска между половинами
+    const div = meshBox(0.012, 0.0035, 0.05, MAT.pip);   // риска между половинами
     div.position.y = -0.012; div.castShadow = false;
     g.add(div);
-    const pipGeo = new T.CylinderGeometry(0.004, 0.004, 0.0016, 14);
+    const pipGeo = new T.CylinderGeometry(0.0052, 0.0052, 0.002, 14);
     for (const xc of [0.0056, -0.0056])               // обе большие грани (x ±)
       for (const [py, pz] of [[0.035, 0.011], [0.035, -0.011], [-0.06, 0]]) {
         const p = new T.Mesh(pipGeo, MAT.pip);
@@ -601,8 +662,10 @@ function buildScene3D() {
     const head = meshBox(0.16, 0.32, 0.04, MAT.pine);
     g.add(head);
     // палка: от верха головы (0.44) до оси (0.80) — точно, без протыкания
-    const stick = new T.Mesh(new T.CylinderGeometry(0.007, 0.007, 0.36, 12), MAT.woodD);
+    const stick = new T.Mesh(new T.CylinderGeometry(0.010, 0.010, 0.36, 12), MAT.woodD);
     stick.position.set(0, 0.62, 0);
+    const collar = new T.Mesh(new T.CylinderGeometry(0.016, 0.016, 0.03, 14), MAT.brass);
+    collar.position.set(0, 0.795, 0); g.add(collar);   // хомут у оси
     stick.castShadow = true;
     g.add(stick);
     // латунная окантовка головы — как у настоящего молоточка
@@ -629,6 +692,8 @@ function buildScene3D() {
     threadMesh(3.25, 1.02, byName.bell, 0.002);   // шнур с крюка на перекладине
   }
 
+  { const curb = meshBox(0.03, 0.06, 0.5, MAT.woodD);   // упор на полу за машиной
+    curb.position.set(4.35, 0.03, 0); curb.castShadow = true; bgGroup.add(curb); }
   /* страйкеры */
   for (const nm of ["strikerL", "strikerR"]) {
     const info = bodies.find(b => b.name === nm);
@@ -668,6 +733,21 @@ function sync3D() {
 
 /* ---------- UI / HUD / drag ---------- */
 const $ = id => document.getElementById(id);
+function stageOf() {   // живой трекер: где сейчас каждый элемент цепочки
+  const bl = byName.ball, mb = byName.marble;
+  const bp = bl.translation(), mp = mb.translation();
+  const seg = (x, y, span, lo, hi, mid) => x < lo ? span[0] : x < hi ? span[1] : mid;
+  const ballSeg = !running ? "старт" :
+    bp.y > 0.585 ? (bp.x < 1.0 ? "горка" : "стол") :
+    bp.y > 0.24 && bp.x < 2.96 ? "жёлоб" :
+    bp.x < 3.6 ? "у молота" : "покой";
+  const marbSeg = !running ? "старт" :
+    mp.y > 0.585 ? "стол" :
+    mp.y > 0.24 && mp.x < 2.96 ? "жёлоб" :
+    ringCount > 0 && mp.x < 3.6 ? "удар" : "покой";
+  return `шар: ${ballSeg} · домино ${dominoFell}/${TILE_N} · стекло: ${marbSeg}` +
+    (ringCount > 0 ? ` · 🔔 ×${ringCount}` : "");
+}
 function updateHUD() {
   window.__simT = simT; window.__ringCount = ringCount;
   if (running) {
@@ -680,7 +760,7 @@ function updateHUD() {
   $("hudEvent").className = lastEvent.startsWith("нажмите") ? "err" : "";
   const bellA = Math.abs(byName.bell.rotation()) * 180 / Math.PI;
   $("hudStats").textContent =
-    `t ${simT.toFixed(1)}с · колокол ${bellA.toFixed(0)}° · звонков ${ringCount}`;
+    `t ${simT.toFixed(1)}с · ${stageOf()}`;
 }
 let paused = false;
 function frame(t) {
@@ -791,6 +871,15 @@ function exportTest() {
     ball: { x: +bl.translation().x.toFixed(3), y: +bl.translation().y.toFixed(3),
             ke: +(0.5 * 2.1 * (bl.linvel().x ** 2 + bl.linvel().y ** 2)).toFixed(4) },
     marble: { x: +mb.translation().x.toFixed(3), y: +mb.translation().y.toFixed(3) },
+    domPos: Array.from({ length: TILE_N }, (_, i) => {
+      const d = byName["dom" + i], t = d.translation();
+      return [+t.x.toFixed(3), +t.y.toFixed(3), +(d.rotation() * 180 / Math.PI).toFixed(0)];
+    }),
+    ballTrail: (window.__ballTrail || []).slice(-40),
+    marbleTrail: (window.__marbleTrail || []).slice(-40),
+    firstTok: +(window.__firstTok || 0).toFixed(2),
+    tokLog: window.__tokLog || [],
+    firstRing: +(window.__firstRing || 0).toFixed(2),
     bellDeg: +(byName.bell.rotation() * 180 / Math.PI).toFixed(1),
     bellPeak: +((window.__peakBell) || 0).toFixed(1),
     bellAV: +byName.bell.angvel().toFixed(3),

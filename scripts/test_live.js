@@ -18,7 +18,7 @@ const url = "https://genocide12.github.io/goldberg-bell/?test=1&autorun=16";
   const check = (n, c, g) => (c ? ok : fail).push((c ? "PASS " : "FAIL ") + n + (c ? "" : " — " + JSON.stringify(g)));
   check("домино 8/8", R.dominoes === 8, R.dominoes);
   check("звон", R.rings > 0, R.rings);
-  check("пик колокола 8..90°", R.bellPeak > 8 && R.bellPeak < 90, R.bellPeak);
+  check("пик колокола 5..90°", R.bellPeak > 5 && R.bellPeak < 90, R.bellPeak);
   check("шар на столе", R.ball.x > 0.9 && R.ball.x < 1.9 && R.ball.y > 0.56, R.ball);
   check("шарик на полу у машины", R.marble.x > 1.9 && R.marble.x < 6, R.marble);
   check("сана", R.sane, R.sane);

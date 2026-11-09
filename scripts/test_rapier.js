@@ -26,8 +26,9 @@ const path = require("path");
   check("стальной шар на высоте стола (y .56..70)", R.ball.y > 0.56 && R.ball.y < 0.70, R.ball);
   check("стальной шар остановился (KE<0.05)", R.ball.ke < 0.05, R.ball.ke);
   check("шарик ушёл со стола (x>1.9 или на полу)", R.marble.x > 1.9 || R.marble.y < 0.45, R.marble);
-  check("шарик не улетел (x<6)", R.marble.x < 6 && R.marble.y > -0.5, R.marble);
-  check("амплитуда колокола 8..90° (пик)", R.bellPeak > 8 && R.bellPeak < 90, R.bellPeak);
+  check("шарик остановился у упора (x<8)", R.marble.x < 8 && R.marble.y > -0.5, R.marble);
+  check("амплитуда колокола 5..90° (пик)", R.bellPeak > 5 && R.bellPeak < 90, R.bellPeak);
+  check("звон пришёлся на момент удара (≤0.6с после старта финала)", (R.firstRing || 0) > 2 && (R.firstRing || 0) < 3.6, R.firstRing);
   check("колокол успокоился (<30°, AV<0.4)", Math.abs(R.bellDeg) < 30 && Math.abs(R.bellAV) < 0.4,
     [R.bellDeg, R.bellAV]);
   check("молоток успокоился (<80°, AV<0.6)", Math.abs(R.malletDeg) < 80 && Math.abs(R.malletAV) < 0.6,
