@@ -28,7 +28,7 @@ export const P = {
   // дорожка-ярус A (высокий): 0.52..1.90, верх y=0.10
   runX0: 0.52, runX1: 1.90, runTop: 0.10, runH: 0.08, runW: 0.20,
 
-  ballR: 0.016, ball2R: 0.008,        // шар① Ø32 (135 г); шарик② Ø16 (17 г)
+  ballR: 0.016, ball2R: 0.008,        // шар① Ø32 (135 г); шарик② Ø16 стекло (4.3 г)
   ballX0: 0.13,
 
   // волна ①: 8 плашек на ярусе A (6с, 0.75с/шт)
@@ -38,26 +38,27 @@ export const P = {
 
   // молот①: v3-узел — дом7 (последний в волне①) бьёт по голове в зоне кромки
   piv1: [1.28, 0.555], armLen: 0.42,
-  headSize: [0.016, 0.016, 0.050], shaftR: 0.003,  // лёгкая голова ~6 г
+  headSize: [0.020, 0.020, 0.060], shaftR: 0.003,  // как в зелёной v4: ~23 г
 
-  // тумба①: шарик② на дуге 16° молота① — голова заденет его на взмахе
-  tee1X: 1.396, tee1Top: 0.152,
+  // тумба①: шарик② ЦЕНТР в точке дуги 13° взмаха (пик скорости головы):
+  // (1.28+0.42sin13, 0.555-0.42cos13) = (1.374, 0.145); вплотную перед головой
+  tee1X: 1.396, tee1Top: 0.154,   // верх наклонной площадки
 
   // жёлоб-регулятор темпа: от тумбы до нижней полосы
-  chuteX0: 1.40, chuteX1: 3.66, chuteY0: 0.152, chuteY1: 0.07,  // срез +70 мм (рабочая конфигурация)
+  chuteX0: 1.415, chuteX1: 4.02, chuteY0: 0.140, chuteY1: 0.020, // 2.6 м; вход под срезом тумбы
   chuteW: 0.09, chuteT: 0.012,
 
   // нижняя полоса (накладка на столешнице)
-  base2X0: 3.70, base2X1: 5.30, base2Top: -0.015, base2T: 0.005,
+  base2X0: 3.95, base2X1: 5.70, base2Top: -0.015, base2T: 0.005,
 
   // волна ②: 14 плашек на полосе (11с)
-  dom2X0: 3.78, domN2: 10,  // 10 плашек: сжатие хронометража
+  dom2X0: 4.10, domN2: 26,  // длинная волна: дом25 на 4.965
 
   // маятник ②-боёк: ось (5.55, 0.45)
-  piv2: [4.17, 0.425],  // v3-рецепт от дом17 (4.095+0.07); голова Y=полоса+0.02
+  piv2: [5.00, 0.425],  // вплотную к дом25 (грудь 4.97+0.03); голова Y=полоса+0.02
 
   // колокол: юбка на дуге 16° маятника②
-  bellX: 4.30, bellY: 0.045, bellMass: 0.80,  // юбка у дуги 12-13° молота②
+  bellX: 5.095, bellY: 0.045, bellMass: 0.80, // юбка на дуге 12-13° молота②
 };
 
 export function buildMachine(CANNON) {
@@ -68,8 +69,11 @@ export function buildMachine(CANNON) {
 
   const M = {};
   for (const n of ["wood", "steel", "glass", "brass", "dom"]) M[n] = new CANNON.Material(n);
-  const cm = (a, b, fr, rest) =>
-    world.addContactMaterial(new CANNON.ContactMaterial(a, b, { friction: fr, restitution: rest }));
+  // контакты домино — жёсткие и малоинерционные (stiff 1e8, relax 2):
+  // при дефолтных relax 3 волна «висит клином» по 10+ секунд
+  const cm = (a, b, fr, rest, eq) =>
+    world.addContactMaterial(new CANNON.ContactMaterial(a, b,
+      { friction: fr, restitution: rest, ...eq }));
   cm(M.wood, M.wood, P.fr.woodWood, P.rest.woodWood);
   cm(M.steel, M.wood, P.fr.steelWood, P.rest.steelWood);
   cm(M.glass, M.wood, P.fr.glassWood, P.rest.glassWood);
@@ -77,11 +81,12 @@ export function buildMachine(CANNON) {
   cm(M.wood, M.brass, P.fr.woodBrass, P.rest.woodBrass);
   cm(M.steel, M.brass, P.fr.steelBrass, P.rest.steelBrass);
   cm(M.glass, M.brass, P.fr.glassBrass, P.rest.glassBrass);
-  cm(M.dom, M.dom, 0.10, 0.35);       // полированные грани
-  cm(M.dom, M.wood, 0.80, 0.10);      // подошва цепкая
-  cm(M.dom, M.steel, 0.25, 0.30);
-  cm(M.dom, M.glass, 0.25, 0.35);
-  cm(M.dom, M.brass, 0.30, 0.25);
+  const domEq = { contactEquationStiffness: 1e8, contactEquationRelaxation: 2 };
+  cm(M.dom, M.dom, 0.10, 0.12, domEq);       // грани: щелчок без рикошета
+  cm(M.dom, M.wood, 0.80, 0.10, domEq);      // подошва цепкая
+  cm(M.dom, M.steel, 0.25, 0.30, domEq);
+  cm(M.dom, M.glass, 0.25, 0.35, domEq);
+  cm(M.dom, M.brass, 0.30, 0.25, domEq);
 
   const V = (x, y, z) => new CANNON.Vec3(x, y, z);
   const spec = [], byName = {}, dynamics = [], events = [];
@@ -155,15 +160,24 @@ export function buildMachine(CANNON) {
   // жёлоб-регулятор: 1.78..4.62, пологий спуск
   const chute = board("chute", [P.chuteX0, P.chuteY0], [P.chuteX1, P.chuteY1],
     P.chuteW, P.chuteT, "pine", { wallH: 0.030 });
-  for (const [nx, lx] of [["a", 1.80], ["b", 2.60], ["c", 3.40]])  // три ноги: прогон 2.3 м
+  for (const [nx, lx] of [["a", 2.00], ["b", 3.00], ["c", 3.70]])  // три ноги: прогон 2.6 м
     post("chuteleg" + nx, lx, 0, chute.lineY(lx) - P.chuteT, -0.02, "pine", 0.04, 0.14);
 
   // маятник ①: стойки от яруса A, перекладина
   post("g1postL", P.piv1[0], -0.11, P.piv1[1] + 0.055, P.runTop, "pine", 0.05, 0.05);
   post("g1postR", P.piv1[0], 0.11, P.piv1[1] + 0.055, P.runTop, "pine", 0.05, 0.05);
   staticBox("g1bar", [0.05, 0.05, 0.27], [P.piv1[0], P.piv1[1] + 0.055, 0], "pine", null, "g1bar");
-  // тумба①
-  post("tee1", P.tee1X, 0, P.tee1Top, P.runTop, "pine", 0.012, 0.030);
+  // тумба①: наклонная площадка 15° (шарик② при тапе скатывается сам)
+  const teeQ = new CANNON.Quaternion();
+  teeQ.setFromAxisAngle(new CANNON.Vec3(0, 0, 1), -20 * Math.PI / 180);  // tan20=0.36 > 0.32: скатывание
+  staticBox("tee1", [0.024, 0.006, 0.030],
+    [P.tee1X - 0.003, P.tee1Top - 0.003, 0], "pine", teeQ, "tee");
+  // опора площадки — узкий пост СЗАДИ (1.445): за зоной падения дом7 (край 1.41)
+  // и за дугой взмаха головы (максимум вылета 1.396+10 мм)
+  // опора площадки — КРОНШТЕЙН СБОКУ от стойки молота① (g1postR): доска в z=+0.05,
+  // от z=0.11 к z=0.015 — вне головы молота (до z=0.03) и вне падения дом7 (z±0.022)
+  staticBox("tee1arm", [P.tee1X - P.piv1[0] + 0.06, 0.006, 0.05],
+    [(P.piv1[0] + P.tee1X + 0.06) / 2 - 0.01, P.tee1Top - 0.004, 0.062], "pine", null, "bracket");
 
   // нижняя полоса: накладка на столешнице под волну ②
   staticBox("base2", [P.base2X1 - P.base2X0, P.base2T, 0.42],
@@ -199,7 +213,7 @@ export function buildMachine(CANNON) {
     { angularDamping: 0.10, linearDamping: 0.01,
       spec: { size: [2 * P.ballR, 2 * P.ballR, 2 * P.ballR] } });
 
-  // шарик ② Ø16 (17 г, сталь) — на тумбе① у маятника①
+  // шарик ② Ø16 (сталь 17 г) — на тумбе①: молот① тапает его на взмахе
   addDyn("ball2", 4 / 3 * Math.PI * P.ball2R ** 3 * P.dens.steel, "steel",
     [{ shape: new CANNON.Sphere(P.ball2R) }],
     [P.tee1X, P.tee1Top + P.ball2R, 0], "sphere",
@@ -220,7 +234,11 @@ export function buildMachine(CANNON) {
 
   // маятники: рука 6×420 + голова 20×20×60 (сосна ~10 г)
   function addMallet(name, piv) {
-    const b = addDyn(name, (0.006 * 0.42 * 0.006 + 0.02 * 0.02 * 0.06) * P.dens.pine, "pine",
+    // физмат «сосна»: с дом7 сцепляется (dom-wood 0.80 — плашка тащит голову, длинный
+    // импульс), а тап по шарику — steel-wood 0.32/0.20. Так работало в зелёной v4 (0.78).
+    const b = addDyn(name,
+      (0.006 * P.armLen * 0.006 + P.headSize[0] * P.headSize[1] * P.headSize[2]) * P.dens.pine,
+      "pine",
       [{ shape: new CANNON.Box(V(P.shaftR, P.armLen / 2, P.shaftR)), off: V(0, -P.armLen / 2, 0) },
        { shape: new CANNON.Box(V(P.headSize[0] / 2, P.headSize[1] / 2, P.headSize[2] / 2)),
          off: V(0, -P.armLen, 0) }],

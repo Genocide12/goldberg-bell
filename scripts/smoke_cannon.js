@@ -48,7 +48,7 @@ const check = (name, cond, extra = "") =>
   await page.waitForFunction(() => window.__test && window.__test.rings > 0, null, { timeout: 240000 });
   const t1 = await page.evaluate(() => window.__test);
   check("опыт дошёл до звона", t1.rings > 0 && t1.bellHits > 0, t1);
-  check("волны упали (8+10)", t1.wave1 === 8 && t1.wave2 === 10, t1);
+  check("волны упали (8+26)", t1.wave1 === 8 && t1.wave2 === 26, t1);
 
   // пауза/продолжение
   await page.keyboard.press(" ");

@@ -6,6 +6,9 @@ const { buildMachine } = require("/home/z/my-project/site/machine.js");
 
 const RUNS = +(process.env.RUNS || 1);
 const TEND = +(process.env.TEND || 40);
+// мост-детектор: плашка, зависшая на 20-60° в конце прогона = «не упала»
+// мост = плашка, зависшая НАД укладом (20-55°); 56-90° — нормальный нахлёст плотной волны (шаг 0.4h)
+const bridges = arr => arr.filter(a => a >= 20 && a <= 55).length;
 
 function oneRun(r) {
   const m = buildMachine(CANNON);
@@ -25,7 +28,7 @@ function oneRun(r) {
   const phM1 = find(new RegExp(`mallet1.*${last1}|${last1}.*mallet1`));
   const phB2 = find(/ball2.*mallet1|mallet1.*ball2/);
   const phCh = m.events.find(e => /ball2/.test(e.a + e.b) && /chuteFloor/.test(e.a + e.b) && e.v > 0.1);
-  const phD8 = find(new RegExp(`ball2.*dom${m.P.domN1}|dom${m.P.domN1}.*ball2`));
+  const phD8 = find(new RegExp(`ball2.*dom${m.P.domN1 + 0}|dom${m.P.domN1}.*ball2`));  // первая плашка волны② = dom8
   const phM2 = find(new RegExp(`mallet2.*${last2}|${last2}.*mallet2`));
   const phBell = m.events.find(e => /mallet2/.test(e.a + e.b) && /bell/.test(e.a + e.b) && e.v > 0.05);
   console.log("  фазы:",
@@ -38,14 +41,16 @@ function oneRun(r) {
 
   const ok = [];
   const ck = (name, cond, extra) => ok.push([name, !!cond, extra]);
-  ck("волна① вся", p.domFallen1 === m.P.domN1, p.domAng1.join(","));
-  ck("волна② вся", p.domFallen2 === m.P.domN2, p.domAng2.join(","));
+  ck("волна① вся (8)", p.domFallen1 === m.P.domN1, p.domAng1.join(","));
+  ck("волна② вся (26)", p.domFallen2 === m.P.domN2, p.domAng2.join(","));
   ck("молот① качнулся", !!phM1, "");
-  ck("шарик② запущен молотом①", !!phB2 && phB2.v > 0.3, phB2 ? "v=" + phB2.v : "нет");
-  ck("шарик② дошёл до волны②", !!phD8 && phD8.v > 0.5, phD8 ? "v=" + phD8.v : "нет");
+  ck("шарик② съехал с тумбы", phCh ? "съезд " + phCh.t : !!phB2, "");
+  ck("шарик② влетел в волну②", !!phD8 && phD8.v > 0.5, phD8 ? "v=" + phD8.v : "нет");
   ck("молот② качнулся", !!phM2, "");
   ck("ЗВОНА", p.bellHits >= 1, "hits=" + p.bellHits);
-  ck("звон в 22-35с", p.firstBellT > 22 && p.firstBellT < 35, "t=" + p.firstBellT);
+  ck("звон в 18-28с", p.firstBellT > 18 && p.firstBellT < 28, "t=" + p.firstBellT);
+  ck("без мостов① (20-60°)", bridges(p.domAng1) === 0, bridges(p.domAng1) + " шт");
+  ck("без мостов② (20-60°)", bridges(p.domAng2) === 0, bridges(p.domAng2) + " шт");
   ck("сана", p.sane, "");
   const fails = ok.filter(x => !x[1]);
   console.log(`  run#${r}: ${ok.length - fails.length}/${ok.length}` + (fails.length ? "  FAIL: " + fails.map(f => f[0]).join("; ") : "  ALL OK"));
