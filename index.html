@@ -1,504 +1,458 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-<title>Машина Голдберга — реальная физика (cannon-es)</title>
-<meta name="description" content="Настольная машина Голдберга на физическом движке cannon-es и three.js: стальной шар с горки, волна домино, маятник-молот и латунный колокол. Настоящие плотности, трения и массы, 120 Гц.">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Машина Голдберга · Город из карт — 7 эпох честной физики</title>
+<meta name="description" content="Интерактивная машина Голдберга: 7 эпох от Blender и Bullet Physics до города из 292 игральных карт. Честная физика cannon-es 120 Гц, three.js PBR, звук колокола. Запуск в один клик.">
+<meta property="og:title" content="Машина Голдберга · Город из карт">
+<meta property="og:description" content="7 эпох от Blender до города из 292 игральных карт. Честная физика cannon-es 120 Гц, колокол, пирамида 108 карт, корона падает на 21-й секунде.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://genocide12.github.io/goldberg-bell/">
+<meta property="og:image" content="https://genocide12.github.io/goldberg-bell/assets/banner.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Машина Голдберга · Город из карт">
+<meta name="twitter:description" content="7 эпох честной физики: от Blender до города из 292 игральных карт. Корона падает на 21-й секунде.">
+<meta name="twitter:image" content="https://genocide12.github.io/goldberg-bell/assets/banner.png">
+<meta name="theme-color" content="#0e0f18">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/icon32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/icon16.png">
+<link rel="icon" type="image/png" sizes="64x64" href="assets/icon64.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <style>
-:root{
-  --paper:#f0e9db; --ink:#3d3222; --dim:#8a7c62; --line:#d8cbb0;
-  --wood:#b1793f; --wood-d:#8a5a2e; --err:#b3402e;
-}
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;overflow:hidden}
-body{background:var(--paper);color:var(--ink);
-  font:15px/1.5 "Segoe UI",system-ui,-apple-system,sans-serif}
-#stage{position:relative;height:100%}
-canvas{display:block;width:100%;height:100%;cursor:grab;touch-action:none}
-canvas.drag{cursor:grabbing}
-#top{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:14px;
-  padding:12px 16px;pointer-events:none;
-  background:linear-gradient(180deg,rgba(240,233,219,.92),rgba(240,233,219,0))}
-#top h1{font-size:17px;font-weight:700;letter-spacing:.2px;white-space:nowrap}
-#top h1 b{color:var(--wood-d)}
-#top span{font-size:12.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#btns{margin-left:auto;display:flex;gap:8px;pointer-events:auto}
-button{font:600 13px/1 inherit;color:var(--ink);background:#fff;
-  border:1px solid var(--line);border-radius:20px;padding:9px 14px;cursor:pointer;
-  transition:filter .15s,border-color .15s;box-shadow:0 1px 2px rgba(90,70,40,.12)}
-button:hover{border-color:var(--wood)}
-button:active{transform:translateY(1px)}
-#btnRun{background:var(--wood);border-color:var(--wood);color:#fff;padding:9px 18px}
-#btnRun:hover{background:var(--wood-d);border-color:var(--wood-d)}
-#btnSound.off{opacity:.45}
-#hud{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:space-between;
-  padding:10px 16px;pointer-events:none;font-size:12.5px;color:var(--dim);
-  background:linear-gradient(0deg,rgba(240,233,219,.92),rgba(240,233,219,0))}
-#hudEvent{color:var(--wood-d);font-weight:700}
-#hudEvent.err{color:var(--err)}
-@media (max-width:720px){#top span{display:none}button{padding:8px 10px}}
+  :root{
+    --bg:#0e0f18; --bg2:#141624; --card:#1a1d2e; --line:#2a2e45;
+    --text:#e8e6dd; --muted:#9aa3b8; --gold:#ffcd5c; --red:#c93a46;
+    --green:#3ac96e; --blue:#4a86e8;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    line-height:1.6;overflow-x:hidden}
+  a{color:var(--gold);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+
+  /* ---------- HERO ---------- */
+  .hero{position:relative;min-height:92vh;display:flex;align-items:center;
+    background:radial-gradient(1200px 600px at 78% 18%, #1f2338 0%, transparent 60%),
+               radial-gradient(900px 500px at 12% 88%, #16203a 0%, transparent 55%),
+               linear-gradient(180deg,#0e0f18 0%,#12141f 100%);
+    overflow:hidden}
+  .hero-suits{position:absolute;inset:0;pointer-events:none;opacity:.55}
+  .hero-suits span{position:absolute;font-size:180px;line-height:1;user-select:none;
+    animation:float 9s ease-in-out infinite}
+  .hero-suits .s1{color:#ffffff10;top:4%;right:6%;animation-delay:0s}
+  .hero-suits .s2{color:#c93a4618;top:48%;right:22%;animation-delay:-2.5s;font-size:120px}
+  .hero-suits .s3{color:#ffffff0c;bottom:6%;left:4%;animation-delay:-5s;font-size:220px}
+  @keyframes float{0%,100%{transform:translateY(0) rotate(-4deg)}50%{transform:translateY(-26px) rotate(4deg)}}
+
+  .hero-in{position:relative;z-index:2;display:grid;grid-template-columns:1.15fr .85fr;
+    gap:40px;align-items:center;width:100%}
+  .kicker{display:inline-block;font-size:13px;font-weight:700;letter-spacing:.22em;
+    color:var(--gold);border:1px solid #ffcd5c44;border-radius:999px;padding:7px 16px;
+    margin-bottom:22px;background:#ffcd5c0d}
+  h1{font-size:clamp(40px,6vw,72px);line-height:1.04;font-weight:800;letter-spacing:-.01em}
+  h1 .accent{color:var(--gold)}
+  .lede{font-size:19px;color:var(--muted);margin-top:20px;max-width:560px}
+  .cta-row{display:flex;gap:14px;flex-wrap:wrap;margin-top:34px}
+  .btn{display:inline-flex;align-items:center;gap:10px;padding:14px 26px;border-radius:14px;
+    font-weight:700;font-size:16px;border:1px solid transparent;cursor:pointer;transition:.18s}
+  .btn-primary{background:linear-gradient(135deg,#ffd76e,#e8a92e);color:#231a05;
+    box-shadow:0 8px 30px -8px #e8a92e88}
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 12px 34px -8px #e8a92eaa;text-decoration:none}
+  .btn-ghost{background:#ffffff0f;color:var(--text);border-color:var(--line)}
+  .btn-ghost:hover{background:#ffffff1a;text-decoration:none}
+  .hero-stats{display:flex;gap:34px;margin-top:38px;flex-wrap:wrap}
+  .stat b{font-size:28px;font-weight:800;color:var(--text)}
+  .stat span{display:block;font-size:13px;color:var(--muted);margin-top:2px}
+
+  /* мини-«колода» справа: CSS-карты с наклоном */
+  .deck{position:relative;height:420px}
+  .deck .c{position:absolute;width:150px;height:210px;border-radius:12px;
+    box-shadow:0 16px 40px -12px #000c;animation:float 8s ease-in-out infinite}
+  .deck .c1{background:linear-gradient(145deg,#a82430,#7d1a24);left:32%;top:20px;
+    transform:rotate(-9deg)}
+  .deck .c1::after{content:"";position:absolute;inset:10px;border-radius:8px;
+    background:repeating-linear-gradient(45deg,#00000022 0 6px,transparent 6px 12px),
+               repeating-linear-gradient(-45deg,#00000022 0 6px,transparent 6px 12px)}
+  .deck .c2{background:#f8f6ee;left:47%;top:44px;transform:rotate(6deg);animation-delay:-3s}
+  .deck .c2::after{content:"K♠";position:absolute;left:14px;top:8px;font-weight:800;
+    color:#222;font-size:22px}
+  .deck .c3{background:linear-gradient(145deg,#f8f6ee,#e8e4d8);left:62%;top:78px;
+    transform:rotate(16deg);animation-delay:-1.5s}
+  .deck .c3::after{content:"👑";position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);
+    font-size:52px}
+  .deck .c4{background:#f8f6ee;left:26%;top:170px;transform:rotate(-20deg);animation-delay:-4.5s}
+  .deck .c4::after{content:"Q♥";position:absolute;right:14px;bottom:8px;font-weight:800;
+    color:#c93a46;font-size:20px}
+
+  /* ---------- ЛЕНТА ВЕРСИЙ ---------- */
+  .ribbon{background:linear-gradient(90deg,#e8a92e,#ffcd5c);color:#231a05;font-weight:700;
+    font-size:14px;padding:11px 0;overflow:hidden;white-space:nowrap}
+  .ribbon div{display:inline-block;animation:tick 26s linear infinite}
+  @keyframes tick{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+  /* ---------- СЕКЦИИ ---------- */
+  section{padding:84px 0}
+  .sec-head{margin-bottom:44px}
+  .sec-head .num{font-size:13px;font-weight:800;letter-spacing:.25em;color:var(--gold)}
+  h2{font-size:clamp(28px,4vw,40px);font-weight:800;margin-top:8px;letter-spacing:-.01em}
+  .sec-head p{color:var(--muted);margin-top:10px;max-width:640px}
+
+  /* ---- эры: таймлайн ---- */
+  .timeline{position:relative;padding-left:34px}
+  .timeline::before{content:"";position:absolute;left:9px;top:6px;bottom:6px;width:2px;
+    background:linear-gradient(180deg,var(--gold),#4a86e8,#c93a46)}
+  .era{position:relative;margin-bottom:26px;background:var(--card);border:1px solid var(--line);
+    border-radius:16px;padding:22px 26px;transition:.2s}
+  .era:hover{border-color:#ffcd5c66;transform:translateX(6px)}
+  .era::before{content:"";position:absolute;left:-31px;top:26px;width:12px;height:12px;
+    border-radius:50%;background:var(--bg);border:3px solid var(--gold)}
+  .era.blue::before{border-color:var(--blue)}
+  .era.red::before{border-color:var(--red)}
+  .era.green::before{border-color:var(--green)}
+  .era-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .era-ver{font-size:13px;font-weight:800;color:#231a05;background:var(--gold);
+    padding:3px 10px;border-radius:8px}
+  .era.blue .era-ver{background:var(--blue);color:#fff}
+  .era.red .era-ver{background:var(--red);color:#fff}
+  .era.green .era-ver{background:var(--green);color:#07230f}
+  .era-name{font-size:19px;font-weight:800}
+  .era-date{font-size:13px;color:var(--muted);margin-left:auto}
+  .era p{color:var(--muted);margin-top:8px;font-size:15px}
+  .era-links{margin-top:12px;display:flex;gap:10px;flex-wrap:wrap}
+  .chip{font-size:13px;font-weight:600;padding:5px 12px;border-radius:999px;
+    background:#ffffff10;border:1px solid var(--line);color:var(--text);transition:.15s}
+  .chip:hover{background:#ffffff1c;text-decoration:none;border-color:#ffcd5c66}
+  .chip.tag{color:var(--muted);cursor:default}
+  .chip.tag:hover{background:#ffffff10;border-color:var(--line)}
+
+  /* ---- галерея ---- */
+  .gal{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px}
+  .shot{position:relative;border-radius:14px;overflow:hidden;border:1px solid var(--line);
+    background:var(--card)}
+  .shot img{width:100%;display:block;aspect-ratio:16/10;object-fit:cover;transition:.35s}
+  .shot:hover img{transform:scale(1.045)}
+  .shot figcaption{padding:12px 14px;font-size:14px;color:var(--muted)}
+  .shot figcaption b{color:var(--text)}
+
+  /* ---- физика ---- */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .p-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px}
+  .p-card h3{font-size:17px;font-weight:800;margin-bottom:8px}
+  .p-card h3 em{font-style:normal;margin-right:6px}
+  .p-card p{color:var(--muted);font-size:14.5px}
+  .code{background:#0a0b12;border:1px solid var(--line);border-radius:10px;padding:14px 16px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;
+    color:#c8d2ea;overflow-x:auto;margin-top:12px;white-space:pre}
+  .code .k{color:#ffcd5c}.code .c{color:#5b6478}.code .s{color:#7ec98f}
+
+  /* ---- релизы ---- */
+  table{width:100%;border-collapse:collapse;font-size:14.5px}
+  th{color:var(--gold);text-align:left;font-weight:700;padding:10px 12px;border-bottom:2px solid var(--line)}
+  td{padding:10px 12px;border-bottom:1px solid #23273c;color:var(--muted)}
+  td:first-child{color:var(--text);font-weight:700;white-space:nowrap}
+  .tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+
+  footer{border-top:1px solid var(--line);padding:44px 0 54px;color:var(--muted);font-size:14px}
+  .foot{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;align-items:center}
+
+  @media(max-width:840px){
+    .hero-in{grid-template-columns:1fr}
+    .deck{display:none}
+    .grid2{grid-template-columns:1fr}
+    .era-date{margin-left:0;width:100%}
+  }
 </style>
 </head>
 <body>
-<div id="stage">
-  <div id="top">
-    <h1>Машина Голдберга <b>· реальная физика</b></h1>
-    <span id="sub">cannon-es · шоу ~13 с · 8 плашек → хлыст → жёлоб с нотами 🎵 → 34 плашки → финалист-120 → 🔔 · 120 Гц</span>
-    <div id="btns">
-      <button id="btnRun" title="Сбросить и запустить (Enter)">▶ Запуск</button>
-      <button id="btnPause" title="Пауза (Space)">⏸</button>
-      <button id="btnReset" title="Сброс (R)">↺</button>
-      <button id="btnSound" title="Звук">🔊</button>
-      <button id="btnCam" title="Кино-камера: авто-планы за действием (C)">🎬</button>
+
+<!-- ============ HERO ============ -->
+<header class="hero" id="top">
+  <div class="hero-suits"><span class="s1">♠</span><span class="s2">♥</span><span class="s3">♣</span></div>
+  <div class="wrap hero-in">
+    <div>
+      <span class="kicker">МАШИНА ГОЛДБЕРГА · 7 ЭПОХ · ЧЕСТНАЯ ФИЗИКА</span>
+      <h1>Город из карт.<br><span class="accent">Король пал.</span></h1>
+      <p class="lede">292 игральные карты, пять волн, улица-замок и гигант-пирамида
+      из 108 карт. Ни одной анимации падений — только физический движок
+      cannon-es на 120 Гц. Запуск в один клик, всё считается в браузере.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="index_v7.html">▶ Запустить город из карт</a>
+        <a class="btn btn-ghost" href="#eras">7 эпох проекта</a>
+        <a class="btn btn-ghost" href="https://github.com/Genocide12/goldberg-bell/releases">Релизы</a>
+      </div>
+      <div class="hero-stats">
+        <div class="stat"><b>292</b><span>карты в городе</span></div>
+        <div class="stat"><b>108</b><span>карт в пирамиде</span></div>
+        <div class="stat"><b>120 Гц</b><span>солвер физики</span></div>
+        <div class="stat"><b>21 с</b><span>до падения короля</span></div>
+      </div>
+    </div>
+    <div class="deck" aria-hidden="true">
+      <div class="c c1"></div><div class="c c2"></div><div class="c c3"></div><div class="c c4"></div>
     </div>
   </div>
-  <div id="hud"><span id="hudEvent">нажмите «Запуск»</span><span id="hudStats"></span></div>
-</div>
-<script src="vendor/cannon-es.global.js"></script>
-<script src="vendor/three.core.global.js"></script>
-<script src="vendor/three.global.js"></script>
-<script src="vendor/orbit.global.js"></script>
-<script type="module">
-/* Страница = рендер той же физической модели (site/machine.js).
-   Вся геометрия берётся из m.spec — граф никогда не расходится с физикой.
-   Порядок координат физики и рендера совпадает (y=0 — верх базовой доски). */
-import { buildMachine } from "./machine.js";
+</header>
 
-const $ = id => document.getElementById(id);
-const params = new URLSearchParams(location.search);
-const T = window.THREE;
+<div class="ribbon"><div>
+  ♠ v1 Blender Bullet → ♦ v2 сайт-отчёт → ♣ v3 свой физдвижок → ♥ v4 Rapier + three.js →
+  ♠ v5 cannon-es 3D → ♦ v6 шоу с колоколом → ♣ v7 ГОРОД ИЗ КАРТ →
+  &nbsp;♠ v1 Blender Bullet → ♦ v2 сайт-отчёт → ♣ v3 свой физдвижок → ♥ v4 Rapier + three.js →
+  ♠ v5 cannon-es 3D → ♦ v6 шоу с колоколом → ♣ v7 ГОРОД ИЗ КАРТ →&nbsp;
+</div></div>
 
-/* ---------- рендерер ---------- */
-const renderer = new T.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = T.PCFShadowMap;
-renderer.toneMapping = T.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
-$("stage").prepend(renderer.domElement);
+<!-- ============ ЭПОХИ ============ -->
+<section id="eras">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="num">01 · ИСТОРИЯ</div>
+      <h2>Семь эпох одной машины</h2>
+      <p>Проект начался с рендера в Blender и за два дня прошёл путь до
+      интерактивного города из игральных карт. Каждая эпоха жива — откройте
+      любую и запустите прямо в браузере.</p>
+    </div>
+    <div class="timeline">
 
-const scene = new T.Scene();
-scene.background = new T.Color(0xf0e9db);
-scene.fog = new T.Fog(0xf0e9db, 18, 46);
+      <div class="era">
+        <div class="era-top">
+          <span class="era-ver">v1.0</span>
+          <span class="era-name">Blender · Bullet Physics</span>
+          <span class="era-date">9 ноября 2026</span>
+        </div>
+        <p>Первая машина: шар → домино → молоток-маятник → колокол. Симуляция
+        в Blender 4.5 (Bullet), рендер Cycles, звук колокола синтезирован в Python.
+        Отправная точка всей истории.</p>
+        <div class="era-links">
+          <a class="chip" href="https://github.com/Genocide12/goldberg-bell/releases/tag/v1.0.0">📦 Релиз v1.0.0 (.blend + скрипты)</a>
+          <span class="chip tag">Blender 4.5</span><span class="chip tag">Bullet</span>
+          <span class="chip tag">Cycles</span>
+        </div>
+      </div>
 
-const camera = new T.PerspectiveCamera(46, innerWidth / innerHeight, 0.05, 60);
-camera.position.set(5.2, 2.0, 6.8);
-const controls = new T.OrbitControls(camera, renderer.domElement);
-controls.target.set(3.49, 0.03, 0);
-controls.enableDamping = true;
-controls.maxPolarAngle = Math.PI * 0.495;
-controls.minDistance = 0.6; controls.maxDistance = 13;
+      <div class="era">
+        <div class="era-top">
+          <span class="era-ver">v2.0</span>
+          <span class="era-name">Сайт-отчёт GitHub Pages</span>
+          <span class="era-date">9 ноября 2026</span>
+        </div>
+        <p>Статичный сайт с SVG-схемой машины, галереей из 6 кадров, видео,
+        графиками телеметрии и звуком удара. Первый опыт «как показать симуляцию
+        в интернете».</p>
+        <div class="era-links">
+          <a class="chip" href="history/v2/index.html">▶ Живая копия эпохи v2</a>
+          <a class="chip" href="https://github.com/Genocide12/goldberg-bell/releases/tag/v2.0.0">📦 Релиз v2.0.0</a>
+          <span class="chip tag">SVG-схема</span><span class="chip tag">видео</span>
+        </div>
+      </div>
 
-/* ---------- свет ---------- */
-scene.add(new T.HemisphereLight(0xfff6e8, 0xcabfa8, 0.6));
-const sun = new T.DirectionalLight(0xfff2df, 1.7);
-sun.position.set(4.8, 5.2, 4.0);
-sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.left = -5.0; sun.shadow.camera.right = 5.0;
-sun.shadow.camera.top = 3.2; sun.shadow.camera.bottom = -1.6;
-sun.shadow.camera.near = 0.5; sun.shadow.camera.far = 12;
-sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.004;
-scene.add(sun);
-const fill = new T.DirectionalLight(0xdfe8ff, 0.35);
-fill.position.set(-2, 1.5, -1.5);
-scene.add(fill);
+      <div class="era">
+        <div class="era-top">
+          <span class="era-ver">v3.0</span>
+          <span class="era-name">Собственный физдвижок</span>
+          <span class="era-date">9 ноября 2026</span>
+        </div>
+        <p>Всё своими руками: интегратор, коллизии, 3D-вид — ноль библиотек.
+        Эксперимент, показавший цену готовых движков и научивший читать их
+        исходники. Видео убрано, машина стала интерактивной.</p>
+        <div class="era-links">
+          <a class="chip" href="history/v3/index.html">▶ Живая копия эпохи v3</a>
+          <a class="chip" href="https://github.com/Genocide12/goldberg-bell/releases/tag/v3.0.0">📦 Релиз v3.0.0</a>
+          <span class="chip tag">0 зависимостей</span><span class="chip tag">Canvas 3D</span>
+        </div>
+      </div>
 
-/* ---------- материалы (PBR) ---------- */
-function canvasTex(size, draw) {
-  const c = document.createElement("canvas"); c.width = c.height = size;
-  draw(c.getContext("2d"), size);
-  const t = new T.CanvasTexture(c);
-  t.colorSpace = T.SRGBColorSpace;
-  t.wrapS = t.wrapT = T.RepeatWrapping;
-  t.anisotropy = 4;
-  return t;
-}
-function woodTex(base, dark, light, rings) {   // продольные волокна
-  return canvasTex(512, (g, s) => {
-    g.fillStyle = base; g.fillRect(0, 0, s, s);
-    for (let i = 0; i < rings; i++) {
-      const y = (i / rings) * s + (Math.random() - .5) * 8;
-      g.strokeStyle = Math.random() < .5 ? dark : light;
-      g.globalAlpha = .16 + Math.random() * .2;
-      g.lineWidth = 1 + Math.random() * 2.4;
-      g.beginPath(); g.moveTo(0, y);
-      g.bezierCurveTo(s * .3, y + (Math.random() - .5) * 16, s * .7, y + (Math.random() - .5) * 16, s, y + (Math.random() - .5) * 10);
-      g.stroke();
-    }
-    g.globalAlpha = 1;
-  });
-}
-const pipMat = new T.MeshStandardMaterial({ color: 0x27313a, roughness: .6 });
-const MAT = {
-  pine: new T.MeshStandardMaterial({ map: woodTex("#e6c185", "#b1793f", "#f2dcb4", 26), roughness: .82, metalness: 0 }),
-  walnut: new T.MeshStandardMaterial({ map: woodTex("#8a6440", "#6b4a2c", "#a98a63", 18), roughness: .78, metalness: 0 }),
-  steel: new T.MeshStandardMaterial({ color: 0xd9dde2, roughness: .18, metalness: .95 }),
-  glass: new T.MeshStandardMaterial({ color: 0xd7ecf2, roughness: .05, metalness: .1,
-    transparent: true, opacity: .82 }),
-  brass: new T.MeshStandardMaterial({ color: 0xd9a941, roughness: .32, metalness: .9 }),
-  bell: new T.MeshStandardMaterial({ color: 0xc9992e, roughness: .28, metalness: .92 }),
-  domFace: new T.MeshStandardMaterial({ color: 0xfdfdf6, roughness: .5 }),
-  domBody: new T.MeshStandardMaterial({ color: 0x333a40, roughness: .45 }),
-  wall: new T.MeshStandardMaterial({ color: 0xe8e2d2, roughness: .92 }),
-  floorRoom: new T.MeshStandardMaterial({ map: woodTex("#a8895f", "#83663f", "#c4ab82", 12), roughness: .9 }),
-};
+      <div class="era blue">
+        <div class="era-top">
+          <span class="era-ver">v4.0</span>
+          <span class="era-name">Rapier (WASM) + three.js PBR</span>
+          <span class="era-date">9 ноября 2026</span>
+        </div>
+        <p>Переход на промышленный движок Rapier и PBR-рендер three.js:
+        солнечное освещение, тени, материалы. Дальше — большая волна правок
+        по аудиту каждого элемента против эталонной схемы.</p>
+        <div class="era-links">
+          <a class="chip" href="history/v4/index.html">▶ Живая копия эпохи v4</a>
+          <a class="chip" href="https://github.com/Genocide12/goldberg-bell/releases/tag/v4.0.0">📦 Релиз v4.0.0</a>
+          <span class="chip tag">Rapier WASM</span><span class="chip tag">PBR</span>
+        </div>
+      </div>
 
-/* ---------- построение графа из m.spec ---------- */
-const m = buildMachine(window.CANNON);
-const groupOf = new Map();
-const pickables = [];
+      <div class="era blue">
+        <div class="era-top">
+          <span class="era-ver">v5.0</span>
+          <span class="era-name">cannon-es · настоящая 3D-физика</span>
+          <span class="era-date">9–10 ноября 2026</span>
+        </div>
+        <p>Rapier заменён на cannon-es: 3D-мир вместо 2D-плоскости, реальные
+        домино с правильной геометрией, мёртвый старт второго шарика, длинная
+        цепочка на 28 секунд — два яруса, две волны, два маятника. Жёсткие
+        контакты и наклонная тумба, чтобы домино падали всегда.</p>
+        <div class="era-links">
+          <a class="chip" href="history/v5/index.html">▶ Живая копия эпохи v5</a>
+          <a class="chip" href="https://github.com/Genocide12/goldberg-bell/releases/tag/v5.0.0">📦 Релиз v5.0.0</a>
+          <span class="chip tag">cannon-es</span><span class="chip tag">120 Гц</span><span class="chip tag">28 с</span>
+        </div>
+      </div>
 
-function boxMesh(w, h, d, mat) {
-  const mesh = new T.Mesh(new T.BoxGeometry(w, h, d), mat);
-  mesh.castShadow = mesh.receiveShadow = true;
-  return mesh;
-}
+      <div class="era green">
+        <div class="era-top">
+          <span class="era-ver">v6.0</span>
+          <span class="era-name">Шоу с колоколом</span>
+          <span class="era-date">10 ноября 2026</span>
+        </div>
+        <p>Полноценное шоу: ксилофон из 5 нот по пути шара, финалист-120,
+        кино-камера, которая сама летит за шаром, и финальный звон колокола
+        на 11–15 секундах. Живой тест на проде — 5/5 фаз.</p>
+        <div class="era-links">
+          <a class="chip" href="index_v6.html">▶ Запустить шоу v6</a>
+          <a class="chip" href="https://github.com/Genocide12/goldberg-bell/releases/tag/v6.0.0">📦 Релиз v6.0.0</a>
+          <span class="chip tag">ксилофон</span><span class="chip tag">кино-камера</span>
+        </div>
+      </div>
 
-/* колокол: тело вращения по профилю (юбка 29 → купол) + обод + макушка */
-function bellMeshes() {
-  const g = new T.Group();
-  const pts = [];
-  for (let i = 0; i <= 24; i++) {
-    const u = i / 24;
-    const r = 0.029 - 0.004 * Math.min(1, u * 1.8) - (u > .6 ? 0.005 * (u - .6) / .4 : 0);
-    pts.push(new T.Vector2(Math.max(r, 0.012), u * 0.075));
-  }
-  const lat = new T.Mesh(new T.LatheGeometry(pts, 48), MAT.bell);
-  lat.castShadow = true; g.add(lat);
-  const rim = new T.Mesh(new T.TorusGeometry(0.0295, 0.004, 12, 48), MAT.brass);
-  rim.rotation.x = Math.PI / 2; rim.position.y = 0.004; rim.castShadow = true; g.add(rim);
-  const knob = new T.Mesh(new T.SphereGeometry(0.008, 16, 12), MAT.brass);
-  knob.position.y = 0.078; knob.castShadow = true; g.add(knob);
-  return g;
-}
+      <div class="era red">
+        <div class="era-top">
+          <span class="era-ver">v7.0</span>
+          <span class="era-name">ГОРОД ИЗ КАРТ — текущая</span>
+          <span class="era-date">10 ноября 2026</span>
+        </div>
+        <p>Вся машина построена только из игральных карт: щелчок по первой карте
+        запускает пять волн вееров, они валят башни «Маяк» и «Гранд»,
+        улицу-замок из восьми Λ-домиков и гигант-пирамиду 8-7-6-5-4-3-2-1.
+        Обрушение срывает карту-короля с вершины. Прогоны детерминированы.</p>
+        <div class="era-links">
+          <a class="chip" href="index_v7.html">▶ Запустить город из карт</a>
+          <a class="chip" href="https://github.com/Genocide12/goldberg-bell/releases/tag/v7.0.0">📦 Релиз v7.0.0</a>
+          <span class="chip tag">292 карты</span><span class="chip tag">пирамида 108</span>
+          <span class="chip tag">детерминизм 3/3</span>
+        </div>
+      </div>
 
-/* домино: тёмное тело + белые грани, пипсы «5|3» и риска */
-function dominoMeshes() {
-  const g = new T.Group();
-  const [t, h, w] = m.P.domSize;
-  g.add(boxMesh(t, h, w, MAT.domBody));
-  const pip = new T.CylinderGeometry(0.0027, 0.0027, 0.0016, 10);
-  pip.rotateX(Math.PI / 2);
-  for (const s of [1, -1]) {
-    const face = boxMesh(0.0016, h * .92, w * .92, MAT.domFace);
-    face.position.x = s * (t / 2 + .0008);
-    g.add(face);
-    const pipX = s * (t / 2 + .0026);
-    // верхняя половина — «5», нижняя — «3»
-    const five = [[-1, 1], [0, 1], [1, 1], [-1, -1], [0, -1], [1, -1]]; // 5: без центра-двойки
-    const three = [[-1, 0], [0, 0], [1, 0]];
-    const draw = (spots, hy) => {
-      for (const [px, pz] of spots) {
-        const p = new T.Mesh(pip, pipMat);
-        p.position.set(pipX, hy * .022, px * .014 * (hy > 0 ? 1 : -1) * 0 + pz * .014);
-        if (hy > 0) p.position.y = .022; else p.position.y = -.024;
-        p.position.z = pz * .014;
-        g.add(p);
-      }
-    };
-    draw(five, 1); draw(three, -1);
-    const bar = boxMesh(.001, .002, w * .88, pipMat);
-    bar.position.x = s * (t / 2 + .0026);
-    g.add(bar);
-  }
-  return g;
-}
+    </div>
+  </div>
+</section>
 
-/* молот: палка, латунная ось на перекладине, хомут, голова из ореха */
-function malletMeshes() {
-  const g = new T.Group();
-  const stick = new T.Mesh(new T.CylinderGeometry(.003, .003, m.P.armLen, 12), MAT.pine);
-  stick.position.y = -m.P.armLen / 2; stick.castShadow = true; g.add(stick);
-  const [w, h, d] = m.P.headSize;
-  const head = boxMesh(w, h, d, MAT.walnut);
-  head.position.y = -m.P.armLen; head.castShadow = true; g.add(head);
-  // сквозная ось: латунный цилиндр через перекладину — читаемый шарнир
-  const axle = new T.Mesh(new T.CylinderGeometry(.004, .004, .27, 12), MAT.brass);
-  axle.rotation.x = Math.PI / 2; axle.castShadow = true; g.add(axle);
-  const collar = new T.Mesh(new T.CylinderGeometry(.007, .007, .016, 14), MAT.brass);
-  collar.position.y = -.014; collar.castShadow = true; g.add(collar);
-  return g;
-}
+<!-- ============ ГАЛЕРЕЯ ============ -->
+<section id="gallery" style="background:linear-gradient(180deg,#0e0f18,#12141f)">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="num">02 · КАДРЫ</div>
+      <h2>Как это выглядит</h2>
+      <p>Настоящие кадры из прогонов — от первого рендера в Blender до
+      падения карты-короля.</p>
+    </div>
+    <div class="gal">
+      <figure class="shot"><img src="assets/shot_v7_idle.png" alt="Город из карт: стартовое положение" loading="lazy">
+        <figcaption><b>v7 · Старт.</b> 292 карты заморожены и ждут щелчка по первой.</figcaption></figure>
+      <figure class="shot"><img src="assets/shot_v7_wave.png" alt="Волна вееров из карт" loading="lazy">
+        <figcaption><b>v7 · Волна.</b> Вееры-камертоны валят Λ-домики, темп 0.10–0.14 с/карта.</figcaption></figure>
+      <figure class="shot"><img src="assets/shot_v7_pyr.png" alt="Гигант-пирамида из 108 карт" loading="lazy">
+        <figcaption><b>v7 · Гигант-пирамида.</b> 108 карт: ряды 8-7-6-5-4-3-2-1.</figcaption></figure>
+      <figure class="shot"><img src="assets/shot_v7_king.png" alt="Карта-король падает" loading="lazy">
+        <figcaption><b>v7 · Король пал.</b> Корона летит с вершины на 21-й секунде.</figcaption></figure>
+      <figure class="shot"><img src="assets/shot_v6_notes.png" alt="Ксилофон v6" loading="lazy">
+        <figcaption><b>v6 · Ксилофон.</b> Шар наигрывает 5 нот по пути к колоколу.</figcaption></figure>
+      <figure class="shot"><img src="assets/shot_v6_ring.png" alt="Звон колокола v6" loading="lazy">
+        <figcaption><b>v6 · Звон.</b> Колокол звучит на 11–15 секундах — честный удар.</figcaption></figure>
+      <figure class="shot"><img src="assets/shot_v1_start.png" alt="v1 Blender старт" loading="lazy">
+        <figcaption><b>v1 · Blender.</b> Первый кадр рендера Cycles, где всё началось.</figcaption></figure>
+      <figure class="shot"><img src="assets/shot_v1_strike.png" alt="v1 удар молотка" loading="lazy">
+        <figcaption><b>v1 · Удар.</b> Молоток-маятник заносится по удар колокола.</figcaption></figure>
+      <figure class="shot"><img src="assets/shot_v1_ring.png" alt="v1 звон колокола" loading="lazy">
+        <figcaption><b>v1 · Звон.</b> Финал первой машины: колокол звенит, шар в catcher.</figcaption></figure>
+    </div>
+  </div>
+</section>
 
-for (const s of m.spec) {
-  const kind = s.tag || s.kind || s.shape;
-  let g = null;
-  if (kind === "room") continue;              // стены — отдельным блоком ниже
-  else if (kind === "mallet") g = malletMeshes();
-  else if (kind === "bell") g = bellMeshes();
-  else if (kind === "dom") g = dominoMeshes();
-  else if (kind === "sphere") {
-    g = new T.Group();
-    const mat = s.mat === "glass" ? MAT.glass : s.mat === "walnut" ? MAT.walnut : MAT.steel;
-    const mesh = new T.Mesh(new T.SphereGeometry(s.size[0] / 2, 40, 28), mat);
-    mesh.castShadow = mesh.receiveShadow = true;
-    g.add(mesh);
-  } else if (s.size) {                         // статика: box из spec
-    g = new T.Group();
-    g.add(boxMesh(s.size[0], s.size[1], s.size[2],
-      s.mat === "walnut" ? MAT.walnut : MAT.pine));
-  }
-  if (!g) continue;
-  const b = m.byName[s.name];
-  if (b) {
-    g.position.copy(b.position);
-    g.quaternion.copy(b.quaternion);
-  } else g.position.set(...s.pos);
-  scene.add(g);
-  if (s.dynamic) {
-    groupOf.set(b, g);
-    g.userData.body = b;
-    pickables.push(g);
-  }
-}
+<!-- ============ ФИЗИКА ============ -->
+<section id="physics">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="num">03 · ЧЕСТНОСТЬ</div>
+      <h2>Физика, а не анимация</h2>
+      <p>Ни одно падение в v7 не «нарисовано». Единственный источник правды —
+      физический мир cannon-es; рендер только читает его состояние.</p>
+    </div>
+    <div class="grid2">
+      <div class="p-card">
+        <h3><em>🧊</em>Секрет стойкости карт</h3>
+        <p>Карта толщиной 0.3 мм не стоит на ребре в дискретном солвере —
+        проверено стендом, падает за 0.01 с. Решение: мир не усыпляет тела,
+        каждая карта заморожена <code>body.sleep()</code> и стоит идеально,
+        а любое касание будит тело — дальше работает честная физика.</p>
+      </div>
+      <div class="p-card">
+        <h3><em>🔔</em>Пробуждение по рухнувшей опоре</h3>
+        <p>Второй нюанс: король и верхние этажи башен висели бы в воздухе,
+        если опору выбило без прямого касания. Поэтому движение в 40 мм под
+        спящим телом будит и его — пирамида рушится каскадом, как настоящая.</p>
+      </div>
+      <div class="p-card">
+        <h3><em>🔁</em>Детерминизм</h3>
+        <p>Прогоны воспроизводимы: три запуска подряд дают идентичные цепочки,
+        повторный запуск после сброса — тот же результат. Тесты гоняют сцену
+        headless-браузером и сверяют фазы по таймингам.</p>
+      </div>
+      <div class="p-card">
+        <h3><em>🧪</em>Тесты вместо обещаний</h3>
+        <p>Каждая версия проходила живой прогон: загрузка без JS-ошибок,
+        все фазы по таймингам, звон колокола/падение короля в окне,
+        детерминизм повторного запуска. Для v7 на проде: 5/5 фаз,
+        пирамида 108/108, король — 21-я секунда.</p>
+      </div>
+    </div>
+    <div class="code"><span class="c">// machine_v7.js — единственный источник правды (физика + спека рендера)</span>
+<span class="k">const</span> card = <span class="k">new</span> CANNON.Body({ mass: <span class="s">0.0031</span>, shape: box, allowSleep: <span class="k">false</span> });
+card.sleep();                      <span class="c">// карта заморожена — стоит на ребре</span>
+world.addEventListener(<span class="s">'beginContact'</span>, e =&gt; wake(card));  <span class="c">// касание будит</span>
+<span class="c">// движение в 40 мм под спящим будит и его (рухнула опора)</span></div>
+  </div>
+</section>
 
-/* стены комнаты (визуал) и паркет */
-{
-  const wg = new T.Group();
-  const back = new T.Mesh(new T.PlaneGeometry(9.6, 2.4), MAT.wall);
-  back.position.set(3.5, .35, -.62); back.receiveShadow = true; wg.add(back);
-  const sideL = new T.Mesh(new T.PlaneGeometry(9.6, 2.4), MAT.wall);
-  sideL.rotation.y = Math.PI / 2; sideL.position.set(-.55, .35, 0); sideL.receiveShadow = true; wg.add(sideL);
-  const sideR = new T.Mesh(new T.PlaneGeometry(9.6, 2.4), MAT.wall);
-  sideR.rotation.y = -Math.PI / 2; sideR.position.set(7.6, .35, 0); sideR.receiveShadow = true; wg.add(sideR);
-  scene.add(wg);
-  const pf = new T.Mesh(new T.BoxGeometry(11, .1, 11), MAT.floorRoom);
-  pf.position.set(3.5, m.P.floorY - .05, 0); pf.receiveShadow = true; scene.add(pf);
-}
+<!-- ============ РЕЛИЗЫ ============ -->
+<section id="releases" style="background:linear-gradient(180deg,#12141f,#0e0f18)">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="num">04 · РЕЛИЗЫ</div>
+      <h2>Все версии на GitHub</h2>
+      <p>Каждая эпоха — отдельный релиз с заметками, скриншотами и архивом
+      исходников этой эпохи.</p>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Версия</th><th>Кодовое имя</th><th>Движок</th><th>Что нового</th><th>Дата</th></tr></thead>
+        <tbody>
+          <tr><td>v7.0.0</td><td>Город из карт</td><td>cannon-es 120 Гц</td><td>292 карты, 5 волн, пирамида 108, король пал</td><td>10.11.2026</td></tr>
+          <tr><td>v6.0.0</td><td>Шоу с колоколом</td><td>cannon-es 120 Гц</td><td>Ксилофон 5 нот, кино-камера, финалист-120</td><td>10.11.2026</td></tr>
+          <tr><td>v5.0.0</td><td>Реальные домино</td><td>cannon-es</td><td>3D-мир, цепочка 28 с, два яруса, два маятника</td><td>09.11.2026</td></tr>
+          <tr><td>v4.0.0</td><td>Rapier + PBR</td><td>Rapier WASM</td><td>Промышленный движок, three.js PBR, аудит схемы</td><td>09.11.2026</td></tr>
+          <tr><td>v3.0.0</td><td>Свой физдвижок</td><td>собственный</td><td>Интегратор и коллизии с нуля, ноль зависимостей</td><td>09.11.2026</td></tr>
+          <tr><td>v2.0.0</td><td>Сайт-отчёт</td><td>—</td><td>SVG-схема, галерея, видео, телеметрия</td><td>09.11.2026</td></tr>
+          <tr><td>v1.0.0</td><td>Blender Bullet</td><td>Bullet (Blender 4.5)</td><td>Первая машина: шар → домино → колокол</td><td>09.11.2026</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
 
-/* ---------- звук: в момент удара (события приходят из физики) ---------- */
-let AC = null, master = null, soundOn = true;
-function ensureAudio() {
-  if (!soundOn) return;
-  if (!AC) {
-    AC = new (window.AudioContext || window.webkitAudioContext)();
-    master = AC.createGain(); master.gain.value = .5; master.connect(AC.destination);
-  }
-  if (AC.state === "suspended") AC.resume();
-}
-function voice(partials, gain, dur) {
-  if (!AC || !soundOn) return;
-  const t0 = AC.currentTime;
-  const g = AC.createGain();
-  g.gain.setValueAtTime(0, t0);
-  g.gain.linearRampToValueAtTime(gain, t0 + .004);
-  g.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
-  g.connect(master);
-  for (const [f, a, d, att] of partials) {
-    const o = AC.createOscillator();
-    o.type = "sine"; o.frequency.value = f;
-    const og = AC.createGain();
-    og.gain.setValueAtTime(0, t0);
-    og.gain.linearRampToValueAtTime(a, t0 + att);
-    og.gain.exponentialRampToValueAtTime(.0001, t0 + d);
-    o.connect(og); og.connect(g);
-    o.start(t0); o.stop(t0 + d + .05);
-  }
-}
-function ring(v) {   // латунный звон
-  const f = 620 + Math.random() * 30;
-  voice([[f, .9, 3.4, .002], [f * 2, .4, 2.6, .002], [f * 2.4, .3, 1.9, .002],
-         [f * 3, .2, 1.4, .002], [f * 4.5, .12, .9, .002]],
-    .22 + .3 * Math.min(v / 2, 1), 3.6);
-}
-function clack(v) { voice([[1600, .35, .012, .001], [520, .45, .022, .001]],
-  .05 + .13 * Math.min(v / 2, 1), .05); }
-function tok(v) { voice([[120, 1, .16, .002], [330, .5, .1, .002], [900, .25, .06, .002]],
-  .2 + .2 * Math.min(v / 3, 1), .3); }
-// нота ксилофона-ладов: латунный «дзынь» на частоте лада (D-E-F#-A-B)
-const FRET_FREQ = [293.66, 329.63, 369.99, 440.0, 493.88];
-function note(i) {
-  const f = FRET_FREQ[i];
-  voice([[f, .8, .5, .002], [f * 2, .3, .25, .002], [f * 3.01, .12, .12, .002]], .16, .55);
-}
+<!-- ============ FOOTER ============ -->
+<footer>
+  <div class="wrap foot">
+    <div>«Машина Голдберга · Город из карт» — физика cannon-es, рендер three.js,
+    лицензия MIT.<br>Сделано в 16 коммитах за два дня.</div>
+    <div>
+      <a href="https://github.com/Genocide12/goldberg-bell">GitHub</a> ·
+      <a href="https://github.com/Genocide12/goldberg-bell/releases">Релизы</a> ·
+      <a href="index_v7.html">v7</a> · <a href="index_v6.html">v6</a> ·
+      <a href="#top">Наверх ↑</a>
+    </div>
+  </div>
+</footer>
 
-const audioPairs = [
-  // звон: кончик последнего домино хлещет юбку колокола
-  [/dom\d+.*bell|bell.*dom\d+/, e => e.v > .05 && ring(e.v)],
-  [/dom\d.*dom\d/, e => e.v > .05 && clack(e.v)],
-  [/ball2?.*dom\d|dom\d.*ball2?/, e => e.v > .05 && clack(e.v * .8)],
-  [/ball.*runway|runway.*ball|ball.*rampFloor|rampFloor.*ball/, e => e.v > .05 && tok(e.v * .7)],
-  [/ball2.*chute|chute.*ball2/, e => e.v > .05 && tok(e.v * .5)],
-];
-let sndIdx = 0, fretIdx = 0;
-function pumpAudio() {
-  for (; sndIdx < m.events.length; sndIdx++) {
-    const e = m.events[sndIdx];
-    for (const [re, fn] of audioPairs)
-      if (re.test(e.a + "×" + e.b)) { fn(e); break; }
-  }
-  // ноты ксилофона: xyloNotes растёт — играем следующую
-  const notes = m.probe().xyloNotes;
-  while (fretIdx < notes.length && notes[fretIdx] <= simT) { note(fretIdx); fretIdx++; }
-}
-
-/* ---------- HUD ---------- */
-let simT = 0, rings = 0, lastEvent = "нажмите «Запуск»";
-function updateHUD() {
-  $("hudEvent").textContent = lastEvent;
-  $("hudEvent").className = lastEvent.startsWith("нажмите") ? "err" : "";
-  const p = m.probe();
-  $("hudStats").textContent =
-    `t ${simT.toFixed(1)}с · волны ${p.domFallen1}/${m.P.domN1} и ${p.domFallen2}/${m.P.domN2} · 🎵 ${fretIdx}/5 · 🔔 ×${rings}`;
-}
-
-/* ---------- кино-камера: авто-планы по фазам ----------
-   До звонка камера сама летит за действием (план = фаза цепи);
-   колесо/драг OrbitControls отключают авто (режим «свободно»). */
-window.cine = !params.has("test");
-function cineUpdate(dt) {
-  if (!window.cine || !running) return;
-  const b2 = m.byName.ball2, w2f = m.probe().domFallen2;
-  let px, py, pz, tx, ty;
-  if (simT < 1.9) {           // план 1: старт — горка и шар
-    px = 0.55; py = 0.85; pz = 1.7; tx = 0.7; ty = 0.12;
-  } else if (simT < 4.9) {    // план 2: волна① и хлыст дом7
-    px = 2.15; py = 0.72; pz = 1.35; tx = 2.25; ty = 0.10;
-  } else if (simT < 8.6) {    // план 3: шарик② бежит по жёлобу (ноты!)
-    const k = Math.min(1, Math.max(0, (b2.position.x - 2.6) / 2.2));
-    px = 2.7 + k * 2.0; py = 0.55; pz = 1.15; tx = 2.7 + k * 2.0; ty = 0.06;
-  } else if (simT < 12.6) {   // план 4: волна② бежит к финалисту
-    const k = Math.min(1, Math.max(0, (simT - 8.6) / 3.5));
-    px = 5.2 + k * 0.9; py = 0.60; pz = 1.45; tx = 5.2 + k * 0.9; ty = 0.05;
-  } else {                    // план 5: финал — финалист и колокол
-    px = 6.35; py = 0.55; pz = 1.30; tx = 6.45; ty = 0.10;
-  }
-  const l = Math.min(1, 3.2 * (dt || 0.016));   // плавность НЕ зависит от fps
-  camera.position.lerp(new T.Vector3(px, py, pz), l);
-  controls.target.lerp(new T.Vector3(tx, ty, 0), l);
-}
-
-/* ---------- цикл: физика 120 Гц, рендер rAF ---------- */
-let running = false, paused = false, acc = 0, lastBell = 0, bellAt = 0;
-function frame(now) {
-  requestAnimationFrame(frame);
-  const dt = Math.min((now - (frame.last || now)) / 1000, params.has("test") ? .5 : .1); frame.last = now;
-  if (running && !paused) {
-    // темп: в тест-режиме догоняем до 2× реального времени (rAF в софт-рендере
-    // может идти 4-14 fps — симуляция не должна от этого зависеть)
-    const pace = params.has("test") ? 2 : 1;
-    acc += dt * pace;
-    const cap = params.has("test") ? 240 : 30;
-    let n = 0;
-    while (acc >= m.dt && n < cap) { m.step(); acc -= m.dt; n++; simT += m.dt; }
-    pumpAudio();
-    const bellEv = m.events.filter(e => /bell/.test(e.a + e.b) && e.v > 0.25);
-    if (bellEv.length > lastBell) {
-      rings += bellEv.length - lastBell;
-      lastEvent = `🔔 ЗВОНОК №${rings}`;
-      lastBell = bellEv.length;
-      if (!bellAt) bellAt = simT;
-    }
-    // авто-стоп: через 2.5 с после звона (опыт завершён; хвост волны после
-    // звона не показываем — его релаксация не часть истории)
-    if (bellAt && simT > bellAt + 2.5) {
-      running = false;
-      lastEvent = `ФИНАЛ: 🎵 ${fretIdx} нот + 🔔 на ${bellAt.toFixed(1)}-й секунде`;
-    }
-    if (simT > 90) { running = false; lastEvent = "останов по таймауту"; }
-  }
-  for (const [b, g] of groupOf) {
-    g.position.copy(b.position);
-    g.quaternion.copy(b.quaternion);
-  }
-  cineUpdate(dt);
-  controls.update();
-  if ((frame.k = (frame.k || 0) + 1) % 6 === 0) updateHUD();
-  renderer.render(scene, camera);
-  if (params.has("test")) {
-    const p = m.probe();
-    window.__test = {
-      t: +simT.toFixed(2), rings,
-      wave1: p.domFallen1, wave2: p.domFallen2,
-      ball2x: +p.ball2.p[0].toFixed(2),
-      bellHits: p.bellHits, firstBellT: p.firstBellT,
-      sane: p.sane, allRest: p.allRest,
-    };
-    document.title = `TEST t=${simT.toFixed(1)} r=${rings} w${p.domFallen1}+${p.domFallen2}`;
-  }
-}
-requestAnimationFrame(frame);
-
-/* ---------- drag мышью ---------- */
-const ray = new T.Raycaster();
-const ndc = new T.Vector2();
-let drag = null;
-renderer.domElement.addEventListener("wheel", () => { window.cine = false; }, { passive: true });
-renderer.domElement.addEventListener("pointerdown", e => {
-  if (params.has("test")) return;
-  window.cine = false;   // юзер рулит — авто-планы off
-  ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
-  ray.setFromCamera(ndc, camera);
-  const hit = ray.intersectObjects(pickables, true)[0];
-  let g = hit && hit.object;
-  while (g && !g.userData.body) g = g.parent;
-  if (g) {
-    const b = g.userData.body;
-    drag = { b, depth: camera.position.distanceTo(hit.point) };
-    b.wakeUp();
-    renderer.domElement.classList.add("drag");
-    e.preventDefault();
-  }
-});
-addEventListener("pointermove", e => {
-  if (!drag) return;
-  ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
-  ray.setFromCamera(ndc, camera);
-  const target = ray.ray.origin.clone().add(ray.ray.direction.clone().multiplyScalar(drag.depth));
-  const b = drag.b;
-  const cur = b.position;
-  const k = .5 * b.mass / m.dt / 60;
-  b.applyForce(new CANNON.Vec3((target.x - cur.x) * k, (target.y - cur.y) * k, (target.z - cur.z) * k), new CANNON.Vec3(0, 0, 0));
-  b.angularVelocity.scale(.97, b.angularVelocity);
-});
-addEventListener("pointerup", () => {
-  if (drag) { drag.b.applyForce(new CANNON.Vec3(0, 0, 0), new CANNON.Vec3(0, 0, 0)); drag = null; renderer.domElement.classList.remove("drag"); }
-});
-
-/* ---------- кнопки ---------- */
-function resetAll() {
-  m.reset();
-  simT = 0; rings = 0; lastBell = 0; bellAt = 0; sndIdx = 0; fretIdx = 0;
-  lastEvent = "нажмите «Запуск»";
-  updateHUD();
-}
-$("btnRun").onclick = () => {
-  ensureAudio(); resetAll();
-  running = true; paused = false;
-  window.cine = !params.has("test");   // кино-камера снова ведёт
-  $("btnCam").classList.toggle("off", !window.cine);
-  camera.position.set(0.55, 0.85, 1.7); controls.target.set(0.7, 0.12, 0);
-  lastEvent = "опыт пошёл";
-  updateHUD();
-};
-$("btnReset").onclick = () => { running = false; paused = false; resetAll(); };
-$("btnPause").onclick = () => { if (simT === 0) return; paused = !paused; lastEvent = paused ? "пауза" : "продолжаем"; updateHUD(); };
-$("btnSound").onclick = () => { soundOn = !soundOn; $("btnSound").classList.toggle("off", !soundOn); if (soundOn) ensureAudio(); };
-$("btnCam").onclick = () => {
-  window.cine = !window.cine;
-  $("btnCam").classList.toggle("off", !window.cine);
-  if (!window.cine) { camera.position.set(5.2, 2.0, 6.8); controls.target.set(3.49, 0.03, 0); }
-};
-addEventListener("keydown", e => {
-  if (e.key === "Enter") $("btnRun").click();
-  else if (e.key === "c" || e.key === "C" || e.key === "с" || e.key === "С") $("btnCam").click();
-  else if (e.key === " ") { e.preventDefault(); $("btnPause").click(); }
-  else if (e.key === "r" || e.key === "R" || e.key === "к" || e.key === "К") $("btnReset").click();
-});
-addEventListener("resize", () => {
-  camera.aspect = innerWidth / innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-});
-
-/* тест-режим: автозапуск */
-if (params.has("test")) $("btnRun").click();
-window.__ready = true;
-window.__camPos = () => camera.position.toArray().map(v => +v.toFixed(2));
-window.__camTarget = () => controls.target.toArray().map(v => +v.toFixed(2));
-</script>
 </body>
 </html>

@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Машина Голдберга — реальная физика (cannon-es)</title>
+<link rel="icon" type="image/png" href="assets/icon32.png">
+<meta property="og:title" content="Шоу с колоколом — машина Голдберга (v6)">
+<meta property="og:description" content="Шар → ксилофон из 5 нот → кино-камера летит следом → колокол звонит на 11–15 секундах. Честная физика cannon-es.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://genocide12.github.io/goldberg-bell/index_v6.html">
+<meta property="og:image" content="https://genocide12.github.io/goldberg-bell/assets/banner.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#0e0f18">
+
+<meta name="description" content="Настольная машина Голдберга на физическом движке cannon-es и three.js: стальной шар с горки, волна домино, маятник-молот и латунный колокол. Настоящие плотности, трения и массы, 120 Гц.">
+<style>
+:root{
+  --paper:#f0e9db; --ink:#3d3222; --dim:#8a7c62; --line:#d8cbb0;
+  --wood:#b1793f; --wood-d:#8a5a2e; --err:#b3402e;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden}
+body{background:var(--paper);color:var(--ink);
+  font:15px/1.5 "Segoe UI",system-ui,-apple-system,sans-serif}
+#stage{position:relative;height:100%}
+canvas{display:block;width:100%;height:100%;cursor:grab;touch-action:none}
+canvas.drag{cursor:grabbing}
+#top{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:14px;
+  padding:12px 16px;pointer-events:none;
+  background:linear-gradient(180deg,rgba(240,233,219,.92),rgba(240,233,219,0))}
+#top h1{font-size:17px;font-weight:700;letter-spacing:.2px;white-space:nowrap}
+#top h1 b{color:var(--wood-d)}
+#top span{font-size:12.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#btns{margin-left:auto;display:flex;gap:8px;pointer-events:auto}
+button{font:600 13px/1 inherit;color:var(--ink);background:#fff;
+  border:1px solid var(--line);border-radius:20px;padding:9px 14px;cursor:pointer;
+  transition:filter .15s,border-color .15s;box-shadow:0 1px 2px rgba(90,70,40,.12)}
+button:hover{border-color:var(--wood)}
+button:active{transform:translateY(1px)}
+#btnRun{background:var(--wood);border-color:var(--wood);color:#fff;padding:9px 18px}
+#btnRun:hover{background:var(--wood-d);border-color:var(--wood-d)}
+#btnSound.off{opacity:.45}
+#hud{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:space-between;
+  padding:10px 16px;pointer-events:none;font-size:12.5px;color:var(--dim);
+  background:linear-gradient(0deg,rgba(240,233,219,.92),rgba(240,233,219,0))}
+#hudEvent{color:var(--wood-d);font-weight:700}
+#hudEvent.err{color:var(--err)}
+@media (max-width:720px){#top span{display:none}button{padding:8px 10px}}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="top">
+    <h1>Машина Голдберга <b>· реальная физика</b></h1>
+    <span id="sub">cannon-es · шоу ~13 с · 8 плашек → хлыст → жёлоб с нотами 🎵 → 34 плашки → финалист-120 → 🔔 · 120 Гц</span>
+    <div id="btns">
+      <button id="btnRun" title="Сбросить и запустить (Enter)">▶ Запуск</button>
+      <button id="btnPause" title="Пауза (Space)">⏸</button>
+      <button id="btnReset" title="Сброс (R)">↺</button>
+      <button id="btnSound" title="Звук">🔊</button>
+      <button id="btnCam" title="Кино-камера: авто-планы за действием (C)">🎬</button>
+    </div>
+  </div>
+  <div id="hud"><span id="hudEvent">нажмите «Запуск»</span><span id="hudStats"></span></div>
+</div>
+<script src="vendor/cannon-es.global.js"></script>
+<script src="vendor/three.core.global.js"></script>
+<script src="vendor/three.global.js"></script>
+<script src="vendor/orbit.global.js"></script>
+<script type="module">
+/* Страница = рендер той же физической модели (site/machine.js).
+   Вся геометрия берётся из m.spec — граф никогда не расходится с физикой.
+   Порядок координат физики и рендера совпадает (y=0 — верх базовой доски). */
+import { buildMachine } from "./machine.js";
+
+const $ = id => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+const T = window.THREE;
+
+/* ---------- рендерер ---------- */
+const renderer = new T.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = T.PCFShadowMap;
+renderer.toneMapping = T.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+$("stage").prepend(renderer.domElement);
+
+const scene = new T.Scene();
+scene.background = new T.Color(0xf0e9db);
+scene.fog = new T.Fog(0xf0e9db, 18, 46);
+
+const camera = new T.PerspectiveCamera(46, innerWidth / innerHeight, 0.05, 60);
+camera.position.set(5.2, 2.0, 6.8);
+const controls = new T.OrbitControls(camera, renderer.domElement);
+controls.target.set(3.49, 0.03, 0);
+controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI * 0.495;
+controls.minDistance = 0.6; controls.maxDistance = 13;
+
+/* ---------- свет ---------- */
+scene.add(new T.HemisphereLight(0xfff6e8, 0xcabfa8, 0.6));
+const sun = new T.DirectionalLight(0xfff2df, 1.7);
+sun.position.set(4.8, 5.2, 4.0);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -5.0; sun.shadow.camera.right = 5.0;
+sun.shadow.camera.top = 3.2; sun.shadow.camera.bottom = -1.6;
+sun.shadow.camera.near = 0.5; sun.shadow.camera.far = 12;
+sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.004;
+scene.add(sun);
+const fill = new T.DirectionalLight(0xdfe8ff, 0.35);
+fill.position.set(-2, 1.5, -1.5);
+scene.add(fill);
+
+/* ---------- материалы (PBR) ---------- */
+function canvasTex(size, draw) {
+  const c = document.createElement("canvas"); c.width = c.height = size;
+  draw(c.getContext("2d"), size);
+  const t = new T.CanvasTexture(c);
+  t.colorSpace = T.SRGBColorSpace;
+  t.wrapS = t.wrapT = T.RepeatWrapping;
+  t.anisotropy = 4;
+  return t;
+}
+function woodTex(base, dark, light, rings) {   // продольные волокна
+  return canvasTex(512, (g, s) => {
+    g.fillStyle = base; g.fillRect(0, 0, s, s);
+    for (let i = 0; i < rings; i++) {
+      const y = (i / rings) * s + (Math.random() - .5) * 8;
+      g.strokeStyle = Math.random() < .5 ? dark : light;
+      g.globalAlpha = .16 + Math.random() * .2;
+      g.lineWidth = 1 + Math.random() * 2.4;
+      g.beginPath(); g.moveTo(0, y);
+      g.bezierCurveTo(s * .3, y + (Math.random() - .5) * 16, s * .7, y + (Math.random() - .5) * 16, s, y + (Math.random() - .5) * 10);
+      g.stroke();
+    }
+    g.globalAlpha = 1;
+  });
+}
+const pipMat = new T.MeshStandardMaterial({ color: 0x27313a, roughness: .6 });
+const MAT = {
+  pine: new T.MeshStandardMaterial({ map: woodTex("#e6c185", "#b1793f", "#f2dcb4", 26), roughness: .82, metalness: 0 }),
+  walnut: new T.MeshStandardMaterial({ map: woodTex("#8a6440", "#6b4a2c", "#a98a63", 18), roughness: .78, metalness: 0 }),
+  steel: new T.MeshStandardMaterial({ color: 0xd9dde2, roughness: .18, metalness: .95 }),
+  glass: new T.MeshStandardMaterial({ color: 0xd7ecf2, roughness: .05, metalness: .1,
+    transparent: true, opacity: .82 }),
+  brass: new T.MeshStandardMaterial({ color: 0xd9a941, roughness: .32, metalness: .9 }),
+  bell: new T.MeshStandardMaterial({ color: 0xc9992e, roughness: .28, metalness: .92 }),
+  domFace: new T.MeshStandardMaterial({ color: 0xfdfdf6, roughness: .5 }),
+  domBody: new T.MeshStandardMaterial({ color: 0x333a40, roughness: .45 }),
+  wall: new T.MeshStandardMaterial({ color: 0xe8e2d2, roughness: .92 }),
+  floorRoom: new T.MeshStandardMaterial({ map: woodTex("#a8895f", "#83663f", "#c4ab82", 12), roughness: .9 }),
+};
+
+/* ---------- построение графа из m.spec ---------- */
+const m = buildMachine(window.CANNON);
+const groupOf = new Map();
+const pickables = [];
+
+function boxMesh(w, h, d, mat) {
+  const mesh = new T.Mesh(new T.BoxGeometry(w, h, d), mat);
+  mesh.castShadow = mesh.receiveShadow = true;
+  return mesh;
+}
+
+/* колокол: тело вращения по профилю (юбка 29 → купол) + обод + макушка */
+function bellMeshes() {
+  const g = new T.Group();
+  const pts = [];
+  for (let i = 0; i <= 24; i++) {
+    const u = i / 24;
+    const r = 0.029 - 0.004 * Math.min(1, u * 1.8) - (u > .6 ? 0.005 * (u - .6) / .4 : 0);
+    pts.push(new T.Vector2(Math.max(r, 0.012), u * 0.075));
+  }
+  const lat = new T.Mesh(new T.LatheGeometry(pts, 48), MAT.bell);
+  lat.castShadow = true; g.add(lat);
+  const rim = new T.Mesh(new T.TorusGeometry(0.0295, 0.004, 12, 48), MAT.brass);
+  rim.rotation.x = Math.PI / 2; rim.position.y = 0.004; rim.castShadow = true; g.add(rim);
+  const knob = new T.Mesh(new T.SphereGeometry(0.008, 16, 12), MAT.brass);
+  knob.position.y = 0.078; knob.castShadow = true; g.add(knob);
+  return g;
+}
+
+/* домино: тёмное тело + белые грани, пипсы «5|3» и риска */
+function dominoMeshes() {
+  const g = new T.Group();
+  const [t, h, w] = m.P.domSize;
+  g.add(boxMesh(t, h, w, MAT.domBody));
+  const pip = new T.CylinderGeometry(0.0027, 0.0027, 0.0016, 10);
+  pip.rotateX(Math.PI / 2);
+  for (const s of [1, -1]) {
+    const face = boxMesh(0.0016, h * .92, w * .92, MAT.domFace);
+    face.position.x = s * (t / 2 + .0008);
+    g.add(face);
+    const pipX = s * (t / 2 + .0026);
+    // верхняя половина — «5», нижняя — «3»
+    const five = [[-1, 1], [0, 1], [1, 1], [-1, -1], [0, -1], [1, -1]]; // 5: без центра-двойки
+    const three = [[-1, 0], [0, 0], [1, 0]];
+    const draw = (spots, hy) => {
+      for (const [px, pz] of spots) {
+        const p = new T.Mesh(pip, pipMat);
+        p.position.set(pipX, hy * .022, px * .014 * (hy > 0 ? 1 : -1) * 0 + pz * .014);
+        if (hy > 0) p.position.y = .022; else p.position.y = -.024;
+        p.position.z = pz * .014;
+        g.add(p);
+      }
+    };
+    draw(five, 1); draw(three, -1);
+    const bar = boxMesh(.001, .002, w * .88, pipMat);
+    bar.position.x = s * (t / 2 + .0026);
+    g.add(bar);
+  }
+  return g;
+}
+
+/* молот: палка, латунная ось на перекладине, хомут, голова из ореха */
+function malletMeshes() {
+  const g = new T.Group();
+  const stick = new T.Mesh(new T.CylinderGeometry(.003, .003, m.P.armLen, 12), MAT.pine);
+  stick.position.y = -m.P.armLen / 2; stick.castShadow = true; g.add(stick);
+  const [w, h, d] = m.P.headSize;
+  const head = boxMesh(w, h, d, MAT.walnut);
+  head.position.y = -m.P.armLen; head.castShadow = true; g.add(head);
+  // сквозная ось: латунный цилиндр через перекладину — читаемый шарнир
+  const axle = new T.Mesh(new T.CylinderGeometry(.004, .004, .27, 12), MAT.brass);
+  axle.rotation.x = Math.PI / 2; axle.castShadow = true; g.add(axle);
+  const collar = new T.Mesh(new T.CylinderGeometry(.007, .007, .016, 14), MAT.brass);
+  collar.position.y = -.014; collar.castShadow = true; g.add(collar);
+  return g;
+}
+
+for (const s of m.spec) {
+  const kind = s.tag || s.kind || s.shape;
+  let g = null;
+  if (kind === "room") continue;              // стены — отдельным блоком ниже
+  else if (kind === "mallet") g = malletMeshes();
+  else if (kind === "bell") g = bellMeshes();
+  else if (kind === "dom") g = dominoMeshes();
+  else if (kind === "sphere") {
+    g = new T.Group();
+    const mat = s.mat === "glass" ? MAT.glass : s.mat === "walnut" ? MAT.walnut : MAT.steel;
+    const mesh = new T.Mesh(new T.SphereGeometry(s.size[0] / 2, 40, 28), mat);
+    mesh.castShadow = mesh.receiveShadow = true;
+    g.add(mesh);
+  } else if (s.size) {                         // статика: box из spec
+    g = new T.Group();
+    g.add(boxMesh(s.size[0], s.size[1], s.size[2],
+      s.mat === "walnut" ? MAT.walnut : MAT.pine));
+  }
+  if (!g) continue;
+  const b = m.byName[s.name];
+  if (b) {
+    g.position.copy(b.position);
+    g.quaternion.copy(b.quaternion);
+  } else g.position.set(...s.pos);
+  scene.add(g);
+  if (s.dynamic) {
+    groupOf.set(b, g);
+    g.userData.body = b;
+    pickables.push(g);
+  }
+}
+
+/* стены комнаты (визуал) и паркет */
+{
+  const wg = new T.Group();
+  const back = new T.Mesh(new T.PlaneGeometry(9.6, 2.4), MAT.wall);
+  back.position.set(3.5, .35, -.62); back.receiveShadow = true; wg.add(back);
+  const sideL = new T.Mesh(new T.PlaneGeometry(9.6, 2.4), MAT.wall);
+  sideL.rotation.y = Math.PI / 2; sideL.position.set(-.55, .35, 0); sideL.receiveShadow = true; wg.add(sideL);
+  const sideR = new T.Mesh(new T.PlaneGeometry(9.6, 2.4), MAT.wall);
+  sideR.rotation.y = -Math.PI / 2; sideR.position.set(7.6, .35, 0); sideR.receiveShadow = true; wg.add(sideR);
+  scene.add(wg);
+  const pf = new T.Mesh(new T.BoxGeometry(11, .1, 11), MAT.floorRoom);
+  pf.position.set(3.5, m.P.floorY - .05, 0); pf.receiveShadow = true; scene.add(pf);
+}
+
+/* ---------- звук: в момент удара (события приходят из физики) ---------- */
+let AC = null, master = null, soundOn = true;
+function ensureAudio() {
+  if (!soundOn) return;
+  if (!AC) {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    master = AC.createGain(); master.gain.value = .5; master.connect(AC.destination);
+  }
+  if (AC.state === "suspended") AC.resume();
+}
+function voice(partials, gain, dur) {
+  if (!AC || !soundOn) return;
+  const t0 = AC.currentTime;
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(gain, t0 + .004);
+  g.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
+  g.connect(master);
+  for (const [f, a, d, att] of partials) {
+    const o = AC.createOscillator();
+    o.type = "sine"; o.frequency.value = f;
+    const og = AC.createGain();
+    og.gain.setValueAtTime(0, t0);
+    og.gain.linearRampToValueAtTime(a, t0 + att);
+    og.gain.exponentialRampToValueAtTime(.0001, t0 + d);
+    o.connect(og); og.connect(g);
+    o.start(t0); o.stop(t0 + d + .05);
+  }
+}
+function ring(v) {   // латунный звон
+  const f = 620 + Math.random() * 30;
+  voice([[f, .9, 3.4, .002], [f * 2, .4, 2.6, .002], [f * 2.4, .3, 1.9, .002],
+         [f * 3, .2, 1.4, .002], [f * 4.5, .12, .9, .002]],
+    .22 + .3 * Math.min(v / 2, 1), 3.6);
+}
+function clack(v) { voice([[1600, .35, .012, .001], [520, .45, .022, .001]],
+  .05 + .13 * Math.min(v / 2, 1), .05); }
+function tok(v) { voice([[120, 1, .16, .002], [330, .5, .1, .002], [900, .25, .06, .002]],
+  .2 + .2 * Math.min(v / 3, 1), .3); }
+// нота ксилофона-ладов: латунный «дзынь» на частоте лада (D-E-F#-A-B)
+const FRET_FREQ = [293.66, 329.63, 369.99, 440.0, 493.88];
+function note(i) {
+  const f = FRET_FREQ[i];
+  voice([[f, .8, .5, .002], [f * 2, .3, .25, .002], [f * 3.01, .12, .12, .002]], .16, .55);
+}
+
+const audioPairs = [
+  // звон: кончик последнего домино хлещет юбку колокола
+  [/dom\d+.*bell|bell.*dom\d+/, e => e.v > .05 && ring(e.v)],
+  [/dom\d.*dom\d/, e => e.v > .05 && clack(e.v)],
+  [/ball2?.*dom\d|dom\d.*ball2?/, e => e.v > .05 && clack(e.v * .8)],
+  [/ball.*runway|runway.*ball|ball.*rampFloor|rampFloor.*ball/, e => e.v > .05 && tok(e.v * .7)],
+  [/ball2.*chute|chute.*ball2/, e => e.v > .05 && tok(e.v * .5)],
+];
+let sndIdx = 0, fretIdx = 0;
+function pumpAudio() {
+  for (; sndIdx < m.events.length; sndIdx++) {
+    const e = m.events[sndIdx];
+    for (const [re, fn] of audioPairs)
+      if (re.test(e.a + "×" + e.b)) { fn(e); break; }
+  }
+  // ноты ксилофона: xyloNotes растёт — играем следующую
+  const notes = m.probe().xyloNotes;
+  while (fretIdx < notes.length && notes[fretIdx] <= simT) { note(fretIdx); fretIdx++; }
+}
+
+/* ---------- HUD ---------- */
+let simT = 0, rings = 0, lastEvent = "нажмите «Запуск»";
+function updateHUD() {
+  $("hudEvent").textContent = lastEvent;
+  $("hudEvent").className = lastEvent.startsWith("нажмите") ? "err" : "";
+  const p = m.probe();
+  $("hudStats").textContent =
+    `t ${simT.toFixed(1)}с · волны ${p.domFallen1}/${m.P.domN1} и ${p.domFallen2}/${m.P.domN2} · 🎵 ${fretIdx}/5 · 🔔 ×${rings}`;
+}
+
+/* ---------- кино-камера: авто-планы по фазам ----------
+   До звонка камера сама летит за действием (план = фаза цепи);
+   колесо/драг OrbitControls отключают авто (режим «свободно»). */
+window.cine = !params.has("test");
+function cineUpdate(dt) {
+  if (!window.cine || !running) return;
+  const b2 = m.byName.ball2, w2f = m.probe().domFallen2;
+  let px, py, pz, tx, ty;
+  if (simT < 1.9) {           // план 1: старт — горка и шар
+    px = 0.55; py = 0.85; pz = 1.7; tx = 0.7; ty = 0.12;
+  } else if (simT < 4.9) {    // план 2: волна① и хлыст дом7
+    px = 2.15; py = 0.72; pz = 1.35; tx = 2.25; ty = 0.10;
+  } else if (simT < 8.6) {    // план 3: шарик② бежит по жёлобу (ноты!)
+    const k = Math.min(1, Math.max(0, (b2.position.x - 2.6) / 2.2));
+    px = 2.7 + k * 2.0; py = 0.55; pz = 1.15; tx = 2.7 + k * 2.0; ty = 0.06;
+  } else if (simT < 12.6) {   // план 4: волна② бежит к финалисту
+    const k = Math.min(1, Math.max(0, (simT - 8.6) / 3.5));
+    px = 5.2 + k * 0.9; py = 0.60; pz = 1.45; tx = 5.2 + k * 0.9; ty = 0.05;
+  } else {                    // план 5: финал — финалист и колокол
+    px = 6.35; py = 0.55; pz = 1.30; tx = 6.45; ty = 0.10;
+  }
+  const l = Math.min(1, 3.2 * (dt || 0.016));   // плавность НЕ зависит от fps
+  camera.position.lerp(new T.Vector3(px, py, pz), l);
+  controls.target.lerp(new T.Vector3(tx, ty, 0), l);
+}
+
+/* ---------- цикл: физика 120 Гц, рендер rAF ---------- */
+let running = false, paused = false, acc = 0, lastBell = 0, bellAt = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min((now - (frame.last || now)) / 1000, params.has("test") ? .5 : .1); frame.last = now;
+  if (running && !paused) {
+    // темп: в тест-режиме догоняем до 2× реального времени (rAF в софт-рендере
+    // может идти 4-14 fps — симуляция не должна от этого зависеть)
+    const pace = params.has("test") ? 2 : 1;
+    acc += dt * pace;
+    const cap = params.has("test") ? 240 : 30;
+    let n = 0;
+    while (acc >= m.dt && n < cap) { m.step(); acc -= m.dt; n++; simT += m.dt; }
+    pumpAudio();
+    const bellEv = m.events.filter(e => /bell/.test(e.a + e.b) && e.v > 0.25);
+    if (bellEv.length > lastBell) {
+      rings += bellEv.length - lastBell;
+      lastEvent = `🔔 ЗВОНОК №${rings}`;
+      lastBell = bellEv.length;
+      if (!bellAt) bellAt = simT;
+    }
+    // авто-стоп: через 2.5 с после звона (опыт завершён; хвост волны после
+    // звона не показываем — его релаксация не часть истории)
+    if (bellAt && simT > bellAt + 2.5) {
+      running = false;
+      lastEvent = `ФИНАЛ: 🎵 ${fretIdx} нот + 🔔 на ${bellAt.toFixed(1)}-й секунде`;
+    }
+    if (simT > 90) { running = false; lastEvent = "останов по таймауту"; }
+  }
+  for (const [b, g] of groupOf) {
+    g.position.copy(b.position);
+    g.quaternion.copy(b.quaternion);
+  }
+  cineUpdate(dt);
+  controls.update();
+  if ((frame.k = (frame.k || 0) + 1) % 6 === 0) updateHUD();
+  renderer.render(scene, camera);
+  if (params.has("test")) {
+    const p = m.probe();
+    window.__test = {
+      t: +simT.toFixed(2), rings,
+      wave1: p.domFallen1, wave2: p.domFallen2,
+      ball2x: +p.ball2.p[0].toFixed(2),
+      bellHits: p.bellHits, firstBellT: p.firstBellT,
+      sane: p.sane, allRest: p.allRest,
+    };
+    document.title = `TEST t=${simT.toFixed(1)} r=${rings} w${p.domFallen1}+${p.domFallen2}`;
+  }
+}
+requestAnimationFrame(frame);
+
+/* ---------- drag мышью ---------- */
+const ray = new T.Raycaster();
+const ndc = new T.Vector2();
+let drag = null;
+renderer.domElement.addEventListener("wheel", () => { window.cine = false; }, { passive: true });
+renderer.domElement.addEventListener("pointerdown", e => {
+  if (params.has("test")) return;
+  window.cine = false;   // юзер рулит — авто-планы off
+  ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const hit = ray.intersectObjects(pickables, true)[0];
+  let g = hit && hit.object;
+  while (g && !g.userData.body) g = g.parent;
+  if (g) {
+    const b = g.userData.body;
+    drag = { b, depth: camera.position.distanceTo(hit.point) };
+    b.wakeUp();
+    renderer.domElement.classList.add("drag");
+    e.preventDefault();
+  }
+});
+addEventListener("pointermove", e => {
+  if (!drag) return;
+  ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const target = ray.ray.origin.clone().add(ray.ray.direction.clone().multiplyScalar(drag.depth));
+  const b = drag.b;
+  const cur = b.position;
+  const k = .5 * b.mass / m.dt / 60;
+  b.applyForce(new CANNON.Vec3((target.x - cur.x) * k, (target.y - cur.y) * k, (target.z - cur.z) * k), new CANNON.Vec3(0, 0, 0));
+  b.angularVelocity.scale(.97, b.angularVelocity);
+});
+addEventListener("pointerup", () => {
+  if (drag) { drag.b.applyForce(new CANNON.Vec3(0, 0, 0), new CANNON.Vec3(0, 0, 0)); drag = null; renderer.domElement.classList.remove("drag"); }
+});
+
+/* ---------- кнопки ---------- */
+function resetAll() {
+  m.reset();
+  simT = 0; rings = 0; lastBell = 0; bellAt = 0; sndIdx = 0; fretIdx = 0;
+  lastEvent = "нажмите «Запуск»";
+  updateHUD();
+}
+$("btnRun").onclick = () => {
+  ensureAudio(); resetAll();
+  running = true; paused = false;
+  window.cine = !params.has("test");   // кино-камера снова ведёт
+  $("btnCam").classList.toggle("off", !window.cine);
+  camera.position.set(0.55, 0.85, 1.7); controls.target.set(0.7, 0.12, 0);
+  lastEvent = "опыт пошёл";
+  updateHUD();
+};
+$("btnReset").onclick = () => { running = false; paused = false; resetAll(); };
+$("btnPause").onclick = () => { if (simT === 0) return; paused = !paused; lastEvent = paused ? "пауза" : "продолжаем"; updateHUD(); };
+$("btnSound").onclick = () => { soundOn = !soundOn; $("btnSound").classList.toggle("off", !soundOn); if (soundOn) ensureAudio(); };
+$("btnCam").onclick = () => {
+  window.cine = !window.cine;
+  $("btnCam").classList.toggle("off", !window.cine);
+  if (!window.cine) { camera.position.set(5.2, 2.0, 6.8); controls.target.set(3.49, 0.03, 0); }
+};
+addEventListener("keydown", e => {
+  if (e.key === "Enter") $("btnRun").click();
+  else if (e.key === "c" || e.key === "C" || e.key === "с" || e.key === "С") $("btnCam").click();
+  else if (e.key === " ") { e.preventDefault(); $("btnPause").click(); }
+  else if (e.key === "r" || e.key === "R" || e.key === "к" || e.key === "К") $("btnReset").click();
+});
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+/* тест-режим: автозапуск */
+if (params.has("test")) $("btnRun").click();
+window.__ready = true;
+window.__camPos = () => camera.position.toArray().map(v => +v.toFixed(2));
+window.__camTarget = () => controls.target.toArray().map(v => +v.toFixed(2));
+</script>
+</body>
+</html>
