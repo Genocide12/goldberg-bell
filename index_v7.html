@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Город из карт — машина Голдберга только из игральных карт</title>
+<meta name="description" content="Машина Голдберга, построенная целиком из игральных карт: волны из карт, башни-домики, улица-замок и гигантская пирамида с картой-королём на вершине. Настоящая физика cannon-es, 120 Гц.">
+<style>
+:root{
+  --paper:#ece4d4; --ink:#3d3222; --dim:#8a7c62; --line:#d8cbb0;
+  --felt:#1d6b4f; --felt-d:#155540; --err:#b3402e;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden}
+body{background:var(--paper);color:var(--ink);
+  font:15px/1.5 "Segoe UI",system-ui,-apple-system,sans-serif}
+#stage{position:relative;height:100%}
+canvas{display:block;width:100%;height:100%;cursor:grab;touch-action:none}
+canvas.drag{cursor:grabbing}
+#top{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:14px;
+  padding:12px 16px;pointer-events:none;
+  background:linear-gradient(180deg,rgba(236,228,212,.92),rgba(236,228,212,0))}
+#top h1{font-size:17px;font-weight:700;letter-spacing:.2px;white-space:nowrap}
+#top h1 b{color:var(--felt-d)}
+#top span{font-size:12.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#btns{margin-left:auto;display:flex;gap:8px;pointer-events:auto}
+button{font:600 13px/1 inherit;color:var(--ink);background:#fff;
+  border:1px solid var(--line);border-radius:20px;padding:9px 14px;cursor:pointer;
+  transition:filter .15s,border-color .15s;box-shadow:0 1px 2px rgba(90,70,40,.12)}
+button:hover{border-color:var(--felt)}
+button:active{transform:translateY(1px)}
+#btnRun{background:var(--felt);border-color:var(--felt);color:#fff;padding:9px 18px}
+#btnRun:hover{background:var(--felt-d);border-color:var(--felt-d)}
+#btnSound.off{opacity:.45}
+#hud{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:space-between;
+  padding:10px 16px;pointer-events:none;font-size:12.5px;color:var(--dim);
+  background:linear-gradient(0deg,rgba(236,228,212,.92),rgba(236,228,212,0))}
+#hudEvent{color:var(--felt-d);font-weight:700}
+#hudEvent.err{color:var(--err)}
+#hudEvent.king{color:var(--err);font-size:15px}
+@media (max-width:720px){#top span{display:none}button{padding:8px 10px}}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="top">
+    <h1>Город из карт <b>· машина Голдберга из игральных карт</b></h1>
+    <span id="sub">292 карты: волна A ♠ → башня «Маяк» → волна B ♥ → волна C ♣ → башня «Гранд» → волна D ♦ → улица-замок → ГИГАНТ-пирамида → КОРОЛЬ ПАЛ 👑 · cannon-es 120 Гц</span>
+    <div id="btns">
+      <button id="btnRun" title="Сбросить и запустить (Enter)">▶ Запуск</button>
+      <button id="btnPause" title="Пауза (Space)">⏸</button>
+      <button id="btnReset" title="Сброс (R)">↺</button>
+      <button id="btnSound" title="Звук">🔊</button>
+      <button id="btnCam" title="Кино-камера: авто-планы за действием (C)">🎬</button>
+    </div>
+  </div>
+  <div id="hud"><span id="hudEvent">нажмите «Запуск»</span><span id="hudStats"></span></div>
+</div>
+<script src="vendor/cannon-es.global.js"></script>
+<script src="vendor/three.core.global.js"></script>
+<script src="vendor/three.global.js"></script>
+<script src="vendor/orbit.global.js"></script>
+<script type="module">
+/* Страница = рендер той же физической модели (site/machine_v7.js).
+   Вся геометрия — из m.spec: граф никогда не расходится с физикой.
+   Карты рендерятся настоящими текстурами: рубашка с орнаментом,
+   лицевые стороны (масть+ранг), король и туз — крупными символами. */
+import { buildMachine } from "./machine_v7.js";
+
+const $ = id => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+const T = window.THREE;
+
+/* ---------- рендерер ---------- */
+const renderer = new T.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = T.PCFShadowMap;
+renderer.toneMapping = T.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+$("stage").prepend(renderer.domElement);
+
+const scene = new T.Scene();
+scene.background = new T.Color(0xece4d4);
+scene.fog = new T.Fog(0xece4d4, 16, 42);
+
+const camera = new T.PerspectiveCamera(46, innerWidth / innerHeight, 0.04, 60);
+camera.position.set(4.6, 1.9, 6.6);
+const controls = new T.OrbitControls(camera, renderer.domElement);
+controls.target.set(4.2, 0.05, 0);
+controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI * 0.495;
+controls.minDistance = 0.07; controls.maxDistance = 14;
+
+/* ---------- свет ---------- */
+scene.add(new T.HemisphereLight(0xfff6e8, 0xcabfa8, 0.62));
+const sun = new T.DirectionalLight(0xfff2df, 1.75);
+sun.position.set(4.6, 5.4, 4.2);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -4.6; sun.shadow.camera.right = 4.6;
+sun.shadow.camera.top = 3.4; sun.shadow.camera.bottom = -1.8;
+// машина длинная: тень следует за кино-камерой
+sun.target.position.set(4.2, 0, 0);
+scene.add(sun, sun.target);
+const fill = new T.DirectionalLight(0xdfe8ff, 0.35);
+fill.position.set(-2, 1.5, -1.5);
+scene.add(fill);
+
+/* ---------- материалы ---------- */
+function canvasTex(size, draw) {
+  const c = document.createElement("canvas"); c.width = c.height = size;
+  draw(c.getContext("2d"), size);
+  const t = new T.CanvasTexture(c);
+  t.colorSpace = T.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+function woodTex(base, dark, light, rings) {
+  const c = document.createElement("canvas"); c.width = c.height = 512;
+  const g = c.getContext("2d");
+  g.fillStyle = base; g.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < rings; i++) {
+    const y = (i / rings) * 512 + (Math.random() - .5) * 8;
+    g.strokeStyle = Math.random() < .5 ? dark : light;
+    g.globalAlpha = .16 + Math.random() * .2;
+    g.lineWidth = 1 + Math.random() * 2.4;
+    g.beginPath(); g.moveTo(0, y);
+    g.bezierCurveTo(160, y + (Math.random() - .5) * 16, 360, y + (Math.random() - .5) * 16, 512, y + (Math.random() - .5) * 10);
+    g.stroke();
+  }
+  const t = new T.CanvasTexture(c);
+  t.colorSpace = T.SRGBColorSpace;
+  return t;
+}
+
+/* ---------- ТЕКСТУРЫ ИГРАЛЬНЫХ КАРТ ----------
+   Лицевая сторона карты: 512×738 (пропорция 63:88). У каждой карты
+   своя масть и ранг — по имени из spec (детерминированный выбор).
+   Рубашка: бордо с ромбовидным орнаментом и белой рамкой. */
+const SUITS = { s: "♠", h: "♥", c: "♣", d: "♦" };
+const RANKS = ["A", "K", "Q", "J", "10", "9", "8", "7", "6", "5", "4", "3", "2"];
+function cardFace(suit, rank, big) {
+  return canvasTex(256, (g, s) => {
+    const W = 182, H = 256;         // пропорция 63:88 → 182×254
+    const x0 = (256 - W) / 2;
+    g.fillStyle = "#fdfcf7"; g.fillRect(x0, 0, W, H);
+    g.strokeStyle = "#e8e2d2"; g.lineWidth = 2; g.strokeRect(x0 + 1, 1, W - 2, H - 2);
+    const red = suit === "h" || suit === "d";
+    g.fillStyle = red ? "#c0392b" : "#22303c";
+    g.textAlign = "center"; g.textBaseline = "middle";
+    // угловые индексы (ранг + масть), перевёрнутые снизу
+    for (const [cx, cy, flip] of [[x0 + 22, 22, false], [x0 + W - 22, H - 22, true]]) {
+      g.save(); g.translate(cx, cy); if (flip) g.rotate(Math.PI);
+      g.font = "bold 26px Georgia, serif";
+      g.fillText(rank, 0, -6);
+      g.font = "22px Georgia, serif";
+      g.fillText(SUITS[suit], 0, 14);
+      g.restore();
+    }
+    // центр: крупный символ (или «король» с короной)
+    const cxm = x0 + W / 2, cym = H / 2;
+    if (big === "king") {
+      g.font = "bold 78px Georgia, serif";
+      g.fillText("K", cxm, cym - 16);
+      g.font = "54px Georgia, serif";
+      g.fillText("♛", cxm, cym + 42);
+    } else if (big === "ace") {
+      g.font = "bold 92px Georgia, serif";
+      g.fillText(SUITS[suit], cxm, cym);
+    } else {
+      g.font = "bold 64px Georgia, serif";
+      g.fillText(SUITS[suit], cxm, cym);
+    }
+  });
+}
+function cardBack() {
+  return canvasTex(256, (g, s) => {
+    const W = 182, H = 256, x0 = (256 - W) / 2;
+    g.fillStyle = "#fdfcf7"; g.fillRect(x0, 0, W, H);
+    g.fillStyle = "#8e1f33"; g.fillRect(x0 + 8, 8, W - 16, H - 16);
+    g.strokeStyle = "#a44a58"; g.lineWidth = 1.4;
+    // ромбовидная сетка орнамента
+    for (let y = 8; y <= H - 8; y += 14)
+      for (let x = x0 + 8; x <= x0 + W - 8; x += 14) {
+        const ox = (((y - 8) / 14) | 0) % 2 ? 7 : 0;
+        g.beginPath();
+        g.moveTo(x + ox, y - 4.6); g.lineTo(x + ox + 4.6, y);
+        g.lineTo(x + ox, y + 4.6); g.lineTo(x + ox - 4.6, y);
+        g.closePath(); g.stroke();
+      }
+    // рамка
+    g.strokeStyle = "#fdfcf7"; g.lineWidth = 3;
+    g.strokeRect(x0 + 8, 8, W - 16, H - 16);
+    g.strokeStyle = "#5d1622"; g.lineWidth = 1.5;
+    g.strokeRect(x0 + 12, 12, W - 24, H - 24);
+  });
+}
+
+/* масти карт по имени: волны — чередование, домики — «козырные»,
+   король — бубновый (одна!), камертоны — тузы, веера — джокеры */
+function suitOf(name, face, kind) {
+  if (face === "king") return "d";
+  if (face === "ace") return kind === "fan" ? "s" : "c";
+  if (face === "fan") return "h";
+  if (/^w[ABCD]\d+$/.test(name)) {
+    const n = parseInt(name.slice(2)) || 0;
+    return ["s", "h", "c", "d"][n % 4];
+  }
+  return ["s", "h", "c", "d"][(name.charCodeAt(name.length - 1) + name.length) % 4];
+}
+const faceCache = new Map();
+function faceMat(suit, rank, big) {
+  const key = suit + rank + (big || "");
+  if (!faceCache.has(key))
+    faceCache.set(key, new T.MeshStandardMaterial({ map: cardFace(suit, rank, big), roughness: .62, metalness: 0 }));
+  return faceCache.get(key);
+}
+const backMat = new T.MeshStandardMaterial({ map: cardBack(), roughness: .62, metalness: 0 });
+const edgeMat = new T.MeshStandardMaterial({ color: 0xf2ede0, roughness: .7 });
+
+/* карта = тонкий бокс: лицевая грань + рубашка + светлый торец.
+   Ориентация текстур соответствует spec: size=[X,Y,Z], у стоячей
+   карты лицевая грань смотрит по ±X (путь волны). */
+function cardMesh(s) {
+  const [sx, sy, sz] = s.size;
+  const geo = new T.BoxGeometry(sx, sy, sz);
+  const suit = suitOf(s.name, s.face, s.kind);
+  // чередование сторон в волнах: нечётные карты — рубашкой к +Z
+  // (камера) — полоса «белое-бордовое» читается как карточная цепь
+  const flipBack = /^w[ABCD]\d+$/.test(s.name) && (parseInt(s.name.slice(2)) % 2 === 1);
+  // ранг: из индекса карты — каждая карта «своя»
+  const rank = RANKS[(s.name.charCodeAt(3) + s.name.length) % RANKS.length] || "A";
+  const big = s.face === "king" ? "king" : s.face === "ace" ? "ace" : null;
+  const face = faceMat(suit, s.face === "back" ? rank : (big ? "A" : rank), big);
+  // BoxGeometry: порядок материалов [+x,-x,+y,-y,+z,-z].
+  // Стоячие/наклонные карты (stand/tall/lean/fan): лицевая грань
+  // и рубашка — большие стороны ±Z. Перекладины deck лежат:
+  // большие стороны ±X.
+  const mats = s.kind === "deck"
+    ? [face, backMat, edgeMat, edgeMat, edgeMat, edgeMat]
+    : flipBack
+      ? [edgeMat, edgeMat, edgeMat, edgeMat, backMat, face]
+      : [edgeMat, edgeMat, edgeMat, edgeMat, face, backMat];
+  const mesh = new T.Mesh(geo, mats);
+  mesh.castShadow = mesh.receiveShadow = true;
+  if (s.rotY) mesh.rotation.y = s.rotY;
+  if (s.rotZ) mesh.rotation.z = s.rotZ;
+  return mesh;
+}
+
+/* ---------- машина и граф из m.spec ---------- */
+const m = buildMachine(window.CANNON);
+const groupOf = new Map();
+const pickables = [];
+function boxMesh(w, h, d, mat) {
+  const mesh = new T.Mesh(new T.BoxGeometry(w, h, d), mat);
+  mesh.castShadow = mesh.receiveShadow = true;
+  return mesh;
+}
+const MAT = {
+  pine: new T.MeshStandardMaterial({ map: woodTex("#e6c185", "#b1793f", "#f2dcb4", 26), roughness: .82 }),
+  walnut: new T.MeshStandardMaterial({ map: woodTex("#8a6440", "#6b4a2c", "#a98a63", 18), roughness: .78 }),
+  felt: new T.MeshStandardMaterial({ color: 0x2e7d5b, roughness: .95 }),
+  wall: new T.MeshStandardMaterial({ color: 0xe8e2d2, roughness: .92 }),
+  floorRoom: new T.MeshStandardMaterial({ map: woodTex("#a8895f", "#83663f", "#c4ab82", 12), roughness: .9 }),
+};
+for (const s of m.spec) {
+  const kind = s.tag || s.kind || s.shape;
+  let g = null;
+  if (kind === "room") continue;
+  else if (s.mat === "card") g = new T.Group().add(cardMesh(s));   // карты — по текстурам
+  else if (kind === "field") { g = new T.Group(); g.add(boxMesh(s.size[0], s.size[1], s.size[2], MAT.felt)); }
+  else if (s.size) { g = new T.Group(); g.add(boxMesh(s.size[0], s.size[1], s.size[2],
+    s.mat === "walnut" ? MAT.walnut : MAT.pine)); }
+  if (!g) continue;
+  const b = m.byName[s.name];
+  if (b) { g.position.copy(b.position); g.quaternion.copy(b.quaternion); }
+  else g.position.set(...s.pos);
+  scene.add(g);
+  if (s.dynamic) { groupOf.set(b, g); g.userData.body = b; pickables.push(g); }
+}
+/* стены и паркет */
+{
+  const wg = new T.Group();
+  const back = new T.Mesh(new T.PlaneGeometry(11, 2.4), MAT.wall);
+  back.position.set(4.2, .35, -.62); back.receiveShadow = true; wg.add(back);
+  const sideL = new T.Mesh(new T.PlaneGeometry(11, 2.4), MAT.wall);
+  sideL.rotation.y = Math.PI / 2; sideL.position.set(-.55, .35, 0); sideL.receiveShadow = true; wg.add(sideL);
+  const sideR = new T.Mesh(new T.PlaneGeometry(11, 2.4), MAT.wall);
+  sideR.rotation.y = -Math.PI / 2; sideR.position.set(9.0, .35, 0); sideR.receiveShadow = true; wg.add(sideR);
+  scene.add(wg);
+  const pf = new T.Mesh(new T.BoxGeometry(12, .1, 12), MAT.floorRoom);
+  pf.position.set(4.2, m.P.floorY - .05, 0); pf.receiveShadow = true; scene.add(pf);
+}
+
+/* ---------- звук: шорох и щелчки карт ---------- */
+let AC = null, master = null, soundOn = true;
+function ensureAudio() {
+  if (!soundOn) return;
+  if (!AC) {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    master = AC.createGain(); master.gain.value = .5; master.connect(AC.destination);
+  }
+  if (AC.state === "suspended") AC.resume();
+}
+function noiseVoice(gain, dur, freq, q) {   // шорох карты
+  if (!AC || !soundOn) return;
+  const t0 = AC.currentTime;
+  const len = Math.max(1, (dur * AC.sampleRate) | 0);
+  const buf = AC.createBuffer(1, len, AC.sampleRate);
+  const ch = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const src = AC.createBufferSource(); src.buffer = buf;
+  const bp = AC.createBiquadFilter(); bp.type = "bandpass";
+  bp.frequency.value = freq; bp.Q.value = q;
+  const g = AC.createGain();
+  g.gain.setValueAtTime(gain, t0);
+  g.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
+  src.connect(bp); bp.connect(g); g.connect(master);
+  src.start(t0);
+}
+function swish(v) { noiseVoice(.16 + .3 * Math.min(v / 1.5, 1), .09 + Math.min(v * .05, .12), 2600 + Math.random() * 1400, .9); }
+function slap(v) {   // сочный шлепок карты о карту
+  noiseVoice(.22 + .3 * Math.min(v / 1.5, 1), .05, 900, 1.4);
+  if (!AC || !soundOn) return;
+  const t0 = AC.currentTime;
+  const o = AC.createOscillator(); o.type = "triangle";
+  o.frequency.setValueAtTime(180, t0);
+  o.frequency.exponentialRampToValueAtTime(60, t0 + .07);
+  const g = AC.createGain();
+  g.gain.setValueAtTime(.18 * Math.min(v, 1.5), t0);
+  g.gain.exponentialRampToValueAtTime(.0001, t0 + .09);
+  o.connect(g); g.connect(master); o.start(t0); o.stop(t0 + .1);
+}
+function kingFanfare() {   // король пал — аккорд
+  if (!AC || !soundOn) return;
+  const t0 = AC.currentTime;
+  for (const [f, dl] of [[261.6, 0], [329.6, .06], [392.0, .12], [523.3, .2]]) {
+    const o = AC.createOscillator(); o.type = "sine"; o.frequency.value = f;
+    const g = AC.createGain();
+    g.gain.setValueAtTime(0, t0 + dl);
+    g.gain.linearRampToValueAtTime(.16, t0 + dl + .015);
+    g.gain.exponentialRampToValueAtTime(.0001, t0 + dl + 1.4);
+    o.connect(g); g.connect(master); o.start(t0 + dl); o.stop(t0 + dl + 1.5);
+  }
+}
+let sndIdx = 0;
+function pumpAudio() {
+  for (; sndIdx < m.events.length; sndIdx++) {
+    const e = m.events[sndIdx];
+    if (e.v > .04) {
+      if (/^(w[ABCD]|bt|bh|st|py|crown)/.test(e.a) && /^(w[ABCD]|bt|bh|st|py|crown|field)/.test(e.b))
+        e.v > .25 ? slap(e.v) : swish(e.v);
+    }
+  }
+}
+
+/* ---------- HUD ---------- */
+let simT = 0, lastEvent = "нажмите «Запуск»";
+function updateHUD() {
+  $("hudEvent").textContent = lastEvent;
+  $("hudEvent").className = lastEvent.startsWith("нажмите") ? "err" : "";
+  const p = m.probe();
+  $("hudStats").textContent =
+    `t ${simT.toFixed(1)}с · волны ${p.waveA.fallen}/${p.waveA.total}+${p.waveB.fallen}/${p.waveB.total}+${p.waveC.fallen}/${p.waveC.total}+${p.waveD.fallen}/${p.waveD.total} · улица ${p.streetFall}/${p.streetTotal} · пирамида ${p.pyrFall}/${p.pyrTotal}` +
+    (p.crownFall ? " · 👑 КОРОЛЬ ПАЛ" : "");
+  if (p.crownFall) { $("hudEvent").textContent = "👑 КОРОЛЬ ПАЛ!"; $("hudEvent").className = "king"; }
+}
+
+/* ---------- кино-камера: авто-планы за действием ---------- */
+window.cine = !params.has("test");
+function cineUpdate(dt) {
+  if (!window.cine || !running) return;
+  const p = m.probe();
+  let px, py, pz, tx, ty, tz = 0;
+  const fallA = p.waveA.fallen, fallB = p.waveB.fallen, fallC = p.waveC.fallen, fallD = p.waveD.fallen;
+  if (!fallA) {                       // план 1: старт — первая карта
+    px = 0.55; py = 0.5; pz = 0.85; tx = 0.6; ty = 0.08;
+  } else if (!fallB) {                // план 2: волна A + башня «Маяк»
+    px = 0.85; py = 0.42; pz = 0.72; tx = 0.95; ty = 0.10;
+  } else if (fallC < 30) {            // план 3: волна B летит
+    const k = Math.min(1, fallB / 36);
+    px = 1.4 + k * 1.7; py = 0.4; pz = 0.75; tx = 1.5 + k * 1.6; ty = 0.06;
+  } else if (fallD < 30) {            // план 4: волна C + башня «Гранд»
+    const k = Math.min(1, fallC / 36);
+    px = 3.6 + k * 1.6; py = 0.4; pz = 0.75; tx = 3.7 + k * 1.5; ty = 0.06;
+  } else if (!p.crownFall) {          // план 5: волна D + улица-замок
+    const k = Math.min(1, fallD / 36);
+    px = 5.6 + k * 1.5; py = 0.42; pz = 0.8; tx = 5.7 + k * 1.4; ty = 0.07;
+  } else {                            // план 6: ФИНАЛ — пирамида и король
+    px = 8.15; py = 0.62; pz = 1.15; tx = 8.15; ty = 0.16;
+  }
+  const l = Math.min(1, 2.8 * (dt || 0.016));
+  camera.position.lerp(new T.Vector3(px, py, pz), l);
+  controls.target.lerp(new T.Vector3(tx, ty, tz), l);
+  // тень следует за камерой
+  sun.position.set(tx + 0.4, 5.4, 4.2);
+  sun.target.position.set(tx, 0, 0);
+}
+
+/* ---------- цикл ---------- */
+let running = false, paused = false, acc = 0, crownAt = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min((now - (frame.last || now)) / 1000, params.has("test") ? .5 : .1); frame.last = now;
+  if (running && !paused) {
+    const pace = params.has("test") ? 2 : 1;
+    acc += dt * pace;
+    const cap = params.has("test") ? 240 : 30;
+    let n = 0;
+    while (acc >= m.dt && n < cap) { m.step(); acc -= m.dt; n++; simT += m.dt; }
+    pumpAudio();
+    const p = m.probe();
+    if (!crownAt && p.crownFall) {
+      crownAt = simT;
+      kingFanfare();
+      lastEvent = `👑 КОРОЛЬ ПАЛ на ${simT.toFixed(1)}-й секунде!`;
+    }
+    if (!lastEvent.startsWith("👑") && !lastEvent.startsWith("нажмите")) {
+      if (p.waveA.fallen > 0 && p.waveB.fallen === 0) lastEvent = "волна A пошла ♠ — башня «Маяк» пала";
+      else if (p.waveB.fallen > 0 && p.waveC.fallen === 0) lastEvent = `волна B бежит ♥ (${p.waveB.fallen}/36)`;
+      else if (p.waveC.fallen > 0 && p.waveD.fallen === 0) lastEvent = `волна C бежит ♣ (${p.waveC.fallen}/36)`;
+      else if (p.waveD.fallen > 0 && p.streetFall === 0) lastEvent = `волна D бежит ♦ (${p.waveD.fallen}/36)`;
+      else if (p.streetFall > 0 && !p.crownFall) lastEvent = `улица-замок рушится (${p.streetFall}/8)… пирамида!`;
+    }
+    // авто-стоп: всё легло (или 12с после короля)
+    if (crownAt && (simT > crownAt + 16 || (p.allRest && simT > crownAt + 6))) {
+      running = false;
+      lastEvent = `ФИНАЛ: 👑 КОРОЛЬ ПАЛ на ${crownAt.toFixed(1)}-й секунде · пирамида ${p.pyrFall}/${p.pyrTotal} карт`;
+    }
+    if (simT > 120) { running = false; lastEvent = "останов по таймауту"; }
+  }
+  for (const [b, g] of groupOf) { g.position.copy(b.position); g.quaternion.copy(b.quaternion); }
+  cineUpdate(dt);
+  controls.update();
+  if ((frame.k = (frame.k || 0) + 1) % 6 === 0) updateHUD();
+  renderer.render(scene, camera);
+  if (params.has("test")) {
+    const p = m.probe();
+    window.__test = {
+      t: +simT.toFixed(2),
+      waveA: p.waveA.fallen, waveB: p.waveB.fallen,
+      waveC: p.waveC.fallen, waveD: p.waveD.fallen,
+      tower: p.towerFall, street: p.streetFall, streetTotal: p.streetTotal,
+      pyr: p.pyrFall, pyrTotal: p.pyrTotal,
+      crownFall: !!p.crownFall, crownAt: crownAt ? +crownAt.toFixed(2) : null,
+      sane: p.sane, allRest: p.allRest,
+    };
+    document.title = `TEST t=${simT.toFixed(1)} A${p.waveA.fallen} B${p.waveB.fallen} C${p.waveC.fallen} D${p.waveD.fallen} pyr${p.pyrFall} crown=${p.crownFall ? 1 : 0}`;
+  }
+}
+requestAnimationFrame(frame);
+
+/* ---------- drag мышью (пошевелить карту) ---------- */
+const ray = new T.Raycaster();
+const ndc = new T.Vector2();
+let drag = null;
+renderer.domElement.addEventListener("wheel", () => { window.cine = false; $("btnCam").classList.add("off"); }, { passive: true });
+renderer.domElement.addEventListener("pointerdown", e => {
+  if (params.has("test")) return;
+  window.cine = false; $("btnCam").classList.add("off");
+  ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const hit = ray.intersectObjects(pickables, true)[0];
+  let g = hit && hit.object;
+  while (g && !g.userData.body) g = g.parent;
+  if (g) {
+    const b = g.userData.body;
+    drag = { b, depth: camera.position.distanceTo(hit.point) };
+    b.wakeUp();
+    renderer.domElement.classList.add("drag");
+    e.preventDefault();
+  }
+});
+addEventListener("pointermove", e => {
+  if (!drag) return;
+  ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const target = ray.ray.origin.clone().add(ray.ray.direction.clone().multiplyScalar(drag.depth));
+  const b = drag.b, cur = b.position;
+  const k = .4 * b.mass / m.dt / 60;
+  b.applyForce(new CANNON.Vec3((target.x - cur.x) * k, (target.y - cur.y) * k, (target.z - cur.z) * k), new CANNON.Vec3(0, 0, 0));
+  b.angularVelocity.scale(.97, b.angularVelocity);
+});
+addEventListener("pointerup", () => {
+  if (drag) { drag.b.applyForce(new CANNON.Vec3(0, 0, 0), new CANNON.Vec3(0, 0, 0)); drag = null; renderer.domElement.classList.remove("drag"); }
+});
+
+/* ---------- кнопки ---------- */
+function resetAll() {
+  m.reset();
+  simT = 0; crownAt = 0; sndIdx = 0;
+  lastEvent = "нажмите «Запуск»";
+  $("hudEvent").className = "";
+  updateHUD();
+}
+$("btnRun").onclick = () => {
+  ensureAudio(); resetAll();
+  running = true; paused = false;
+  m.start();                       // щелчок пальцем по первой карте
+  window.cine = !params.has("test");
+  $("btnCam").classList.toggle("off", !window.cine);
+  camera.position.set(0.55, 0.5, 0.85); controls.target.set(0.6, 0.08, 0);
+  lastEvent = "щелчок по первой карте — поехали!";
+  updateHUD();
+};
+$("btnReset").onclick = () => { running = false; paused = false; resetAll(); };
+$("btnPause").onclick = () => { if (simT === 0) return; paused = !paused; lastEvent = paused ? "пауза" : "продолжаем"; updateHUD(); };
+$("btnSound").onclick = () => { soundOn = !soundOn; $("btnSound").classList.toggle("off", !soundOn); if (soundOn) ensureAudio(); };
+$("btnCam").onclick = () => {
+  window.cine = !window.cine;
+  $("btnCam").classList.toggle("off", !window.cine);
+  if (!window.cine) { camera.position.set(4.6, 1.9, 6.6); controls.target.set(4.2, 0.05, 0); }
+};
+addEventListener("keydown", e => {
+  if (e.key === "Enter") $("btnRun").click();
+  else if (e.key === "c" || e.key === "C" || e.key === "с" || e.key === "С") $("btnCam").click();
+  else if (e.key === " ") { e.preventDefault(); $("btnPause").click(); }
+  else if (e.key === "r" || e.key === "R" || e.key === "к" || e.key === "К") $("btnReset").click();
+});
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+if (params.has("test")) $("btnRun").click();
+window.__ready = true;
+window.__camPos = () => camera.position.toArray().map(v => +v.toFixed(2));
+window.__camTarget = () => controls.target.toArray().map(v => +v.toFixed(2));
+window.cine_set = v => { window.cine = v; };
+window.__setCam = (px, py, pz, tx, ty, tz) => {
+  camera.position.set(px, py, pz);
+  controls.target.set(tx, ty, tz);
+  controls.update();
+};
+window.__rayCenter = () => {
+  const rc = new T.Raycaster();
+  rc.setFromCamera(new T.Vector2(0, 0), camera);
+  const hits = rc.intersectObjects(scene.children, true);
+  return hits.slice(0, 3).map(h => ({
+    dist: +h.distance.toFixed(3),
+    mats: Array.isArray(h.object.material)
+      ? h.object.material.map(mm => mm.map ? "tex" : (mm.color ? "#" + mm.color.getHexString() : "?")).join("+")
+      : (h.object.material.map ? "tex1" : "#" + h.object.material.color.getHexString()),
+    pos: h.point.toArray().map(v => +v.toFixed(3)),
+  }));
+};
+</script>
+</body>
+</html>
