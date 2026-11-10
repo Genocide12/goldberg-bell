@@ -348,9 +348,9 @@ function updateHUD() {
 /* ---------- кино-камера: авто-планы по фазам ----------
    До звонка камера сама летит за действием (план = фаза цепи);
    колесо/драг OrbitControls отключают авто (режим «свободно»). */
-let cine = !params.has("test");
-function cineUpdate() {
-  if (!cine || !running) return;
+window.cine = !params.has("test");
+function cineUpdate(dt) {
+  if (!window.cine || !running) return;
   const b2 = m.byName.ball2, w2f = m.probe().domFallen2;
   let px, py, pz, tx, ty;
   if (simT < 1.9) {           // план 1: старт — горка и шар
@@ -366,7 +366,7 @@ function cineUpdate() {
   } else {                    // план 5: финал — финалист и колокол
     px = 6.35; py = 0.55; pz = 1.30; tx = 6.45; ty = 0.10;
   }
-  const l = 0.04;             // плавность
+  const l = Math.min(1, 3.2 * (dt || 0.016));   // плавность НЕ зависит от fps
   camera.position.lerp(new T.Vector3(px, py, pz), l);
   controls.target.lerp(new T.Vector3(tx, ty, 0), l);
 }
@@ -404,7 +404,7 @@ function frame(now) {
     g.position.copy(b.position);
     g.quaternion.copy(b.quaternion);
   }
-  cineUpdate();
+  cineUpdate(dt);
   controls.update();
   if ((frame.k = (frame.k || 0) + 1) % 6 === 0) updateHUD();
   renderer.render(scene, camera);
@@ -426,10 +426,10 @@ requestAnimationFrame(frame);
 const ray = new T.Raycaster();
 const ndc = new T.Vector2();
 let drag = null;
-renderer.domElement.addEventListener("wheel", () => { cine = false; }, { passive: true });
+renderer.domElement.addEventListener("wheel", () => { window.cine = false; }, { passive: true });
 renderer.domElement.addEventListener("pointerdown", e => {
   if (params.has("test")) return;
-  cine = false;   // юзер рулит — авто-планы off
+  window.cine = false;   // юзер рулит — авто-планы off
   ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
   const hit = ray.intersectObjects(pickables, true)[0];
@@ -468,8 +468,8 @@ function resetAll() {
 $("btnRun").onclick = () => {
   ensureAudio(); resetAll();
   running = true; paused = false;
-  cine = !params.has("test");   // кино-камера снова ведёт
-  $("btnCam").classList.toggle("off", !cine);
+  window.cine = !params.has("test");   // кино-камера снова ведёт
+  $("btnCam").classList.toggle("off", !window.cine);
   camera.position.set(0.55, 0.85, 1.7); controls.target.set(0.7, 0.12, 0);
   lastEvent = "опыт пошёл";
   updateHUD();
@@ -478,9 +478,9 @@ $("btnReset").onclick = () => { running = false; paused = false; resetAll(); };
 $("btnPause").onclick = () => { if (simT === 0) return; paused = !paused; lastEvent = paused ? "пауза" : "продолжаем"; updateHUD(); };
 $("btnSound").onclick = () => { soundOn = !soundOn; $("btnSound").classList.toggle("off", !soundOn); if (soundOn) ensureAudio(); };
 $("btnCam").onclick = () => {
-  cine = !cine;
-  $("btnCam").classList.toggle("off", !cine);
-  if (!cine) { camera.position.set(5.2, 2.0, 6.8); controls.target.set(3.49, 0.03, 0); }
+  window.cine = !window.cine;
+  $("btnCam").classList.toggle("off", !window.cine);
+  if (!window.cine) { camera.position.set(5.2, 2.0, 6.8); controls.target.set(3.49, 0.03, 0); }
 };
 addEventListener("keydown", e => {
   if (e.key === "Enter") $("btnRun").click();
@@ -497,6 +497,8 @@ addEventListener("resize", () => {
 /* тест-режим: автозапуск */
 if (params.has("test")) $("btnRun").click();
 window.__ready = true;
+window.__camPos = () => camera.position.toArray().map(v => +v.toFixed(2));
+window.__camTarget = () => controls.target.toArray().map(v => +v.toFixed(2));
 </script>
 </body>
 </html>
