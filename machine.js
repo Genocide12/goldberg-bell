@@ -1,64 +1,78 @@
 /* ============================================================
-   machine.js v4 — длинная цепочка (~25 с) на cannon-es, 3D.
+   machine.js v5 — цепочка на cannon-es, 3D.
    Единый источник для headless-прогона (Node) и страницы (браузер).
-   Продолжает v3 (зелёная): те же материалы, солвер 60, board().
    Система координат: y=0 — верх базовой доски; столешница y=-0.02;
    пол комнаты y=-0.78. Машина идёт вдоль +x, z — поперёк.
-   Цепочка: горка → волна 14 → маятник① → тумба/жёлоб (пологий) →
-   волна 20 → маятник②-боёк → колокол.
+   Цепочка: горка (шар-орех 12 г) → волна① 8 → дом7 опрокидывается
+   НА шарик② → прокат по мёртво-плоскому ярусу → жёлоб 2.4 м (1.5°)
+   → волна② 46 → маятник-боёк → колокол.
+   v5 «по-настоящему» (по жалобе «медленно и не по-настоящему»):
+   - домино 60×28×8 мм, бук 700 кг/м³ → 9.4 г; шаг 0.65×h — реальные
+     пропорции и темп (0.15-0.2 с/плашка, опрокидывание у основания);
+   - шарик② СТОИТ на мёртво-горизонтальном ярусе в 26 мм за гранью
+     дом7: без наклона и без удара он неподвижен — его запускает
+     только физическое падение дом7 (никаких наклонных тумб, на
+     которых шарик «сам катится» на старте);
+   - молот① и наклонная тумба упразднены: их звено было косметическим.
    ============================================================ */
 
 export const P = {
-  dens: { pine: 600, walnut: 700, steel: 7850, glass: 2500, brass: 8500 },
+  dens: { pine: 600, walnut: 700, dom: 700, steel: 7850, glass: 2500, brass: 8500 },
   fr:   { woodWood: 0.45, steelWood: 0.32, glassWood: 0.22, steelGlass: 0.30,
           woodBrass: 0.30, steelBrass: 0.35, glassBrass: 0.40 },
   rest: { woodWood: 0.22, steelWood: 0.20, glassWood: 0.35, steelGlass: 0.50,
           woodBrass: 0.55, steelBrass: 0.50, glassBrass: 0.45 },
   dt: 1 / 120,
 
-  // стол и комната (машина длинная: до x≈5.9)
-  desk: { x0: -0.25, x1: 6.20, z: 0.30, top: -0.02, thick: 0.04 },
+  // стол и комната (машина длинная: до x≈7.3)
+  desk: { x0: -0.25, x1: 7.30, z: 0.30, top: -0.02, thick: 0.04 },
   floorY: -0.78,
 
-  // горка (v3, проверенная): пол 20° от (0.08,0.26) до (0.52,0.104)
+  // горка (проверенная): пол 20° от (0.08,0.26) до (0.52,0.104)
   rampX0: 0.08, rampX1: 0.52, rampY0: 0.26, rampY1: 0.104,
   rampW: 0.09, rampT: 0.012,
   wallH: 0.025, wallT: 0.010,
 
-  // дорожка-ярус A (высокий): 0.52..1.90, верх y=0.10
-  runX0: 0.52, runX1: 1.90, runTop: 0.10, runH: 0.08, runW: 0.20,
+  // ярус A: плоский прогон 0.52..2.40 (верх y=0.10). Он же «полка»
+  // шарика②: мёртво-горизонтален — шарик без удара не двигается.
+  runX0: 0.52, runX1: 2.40, runTop: 0.10, runH: 0.08, runW: 0.20,
 
-  ballR: 0.016, ball2R: 0.008,        // шар① Ø32 (135 г); шарик② Ø16 стекло (4.3 г)
+  ballR: 0.012, ball2R: 0.006,   // шар① Ø24 орех (5 г — мягкий триггер); шарик② Ø12 стекло (2.3 г)
   ballX0: 0.13,
 
-  // волна ①: 8 плашек на ярусе A (6с, 0.75с/шт)
-  domStep: 0.035,
-  dom1X0: 0.94, domN1: 8,
-  domSize: [0.010, 0.088, 0.044],
+  // волна ①: 8 домино У КРАЯ яруса; дом7 центр 2.336, грань 2.340.
+  // Куча улёгшихся плашек занимает до грани+64 мм = 2.40 = край яруса.
+  domStep: 0.039,                 // 0.65 × h — шаг настоящих цепей
+  dom1X0: 2.063, domN1: 8,        // дом0 2.063 … дом7 2.336
+  domSize: [0.008, 0.060, 0.028], // 8×60×28 мм, бук 700 кг/м³ → 9.4 г
 
-  // молот①: v3-узел — дом7 (последний в волне①) бьёт по голове в зоне кромки
-  piv1: [1.28, 0.555], armLen: 0.42,
-  headSize: [0.020, 0.020, 0.060], shaftR: 0.003,  // как в зелёной v4: ~23 г
+  // ПЬЕДЕСТАЛ у края яруса (топ 0.125): шарик② в зоне, где дуга кончика
+  // дом7 (θ≈52) врезается в него радиально — чистый горизонтальный
+  // хлыст (проверено: запуск v=0.68). Хвост волны после звона не показываем:
+  // страница останавливает опыт через 2.5 с после звона.
+  ball2X: 2.392, pedX: 2.389, pedTop: 0.125,
 
-  // тумба①: шарик② ЦЕНТР в точке дуги 13° взмаха (пик скорости головы):
-  // (1.28+0.42sin13, 0.555-0.42cos13) = (1.374, 0.145); вплотную перед головой
-  tee1X: 1.396, tee1Top: 0.154,   // верх наклонной площадки
-
-  // жёлоб-регулятор темпа: от тумбы до нижней полосы
-  chuteX0: 1.415, chuteX1: 4.02, chuteY0: 0.140, chuteY1: 0.020, // 2.6 м; вход под срезом тумбы
+  // жёлоб составной: голова 8° (разгон после пьедестала) + тело 0.4°
+  chH0: 2.40, chH1: 2.75, chHY0: 0.077, chHY1: 0.028,   // голова 8°
+  chB0: 2.75, chB1: 4.94, chBY0: 0.028, chBY1: 0.020,   // тело 0.4°
   chuteW: 0.09, chuteT: 0.012,
 
   // нижняя полоса (накладка на столешнице)
-  base2X0: 3.95, base2X1: 5.70, base2Top: -0.015, base2T: 0.005,
+  base2X0: 4.80, base2X1: 7.15, base2Top: -0.015, base2T: 0.005,
 
-  // волна ②: 14 плашек на полосе (11с)
-  dom2X0: 4.10, domN2: 26,  // длинная волна: дом25 на 4.965
+  // волна ②: длинный честный финал (0.14 с/плашка ≈ 6.5 с)
+  dom2X0: 4.98, domN2: 46,        // дом8 4.98 … дом53 6.735 (грань 6.739)
 
-  // маятник ②-боёк: ось (5.55, 0.45)
-  piv2: [5.00, 0.425],  // вплотную к дом25 (грудь 4.97+0.03); голова Y=полоса+0.02
+  // маятник-боёк: кончик дом53 хлещет его палку на высоте ~35 мм;
+  // палка висит в 34 мм за гранью дом53
+  piv2: [6.773, 0.425], armLen: 0.42, shaftR: 0.003,
+  headSize: [0.020, 0.020, 0.060],
 
-  // колокол: юбка на дуге 16° маятника②
-  bellX: 5.095, bellY: 0.045, bellMass: 0.80, // юбка на дуге 12-13° молота②
+  // колокол: КОНЧИК дом53 хлещет юбку напрямую (молот упразднён:
+  // его 11-секундный ползунок — та самая «медленная неестественность»).
+  // Юбка лицом на 96 мм за гранью дом53, низ на 10 мм над полосой:
+  // кончик при θ55-70 проходит в 30 мм от пола — в юбку.
+  bellX: 6.800, bellY: 0.008, bellMass: 0.15,   // юбка лицом на 46 мм за гранью: кончик при θ≈54 (v 0.85)
 };
 
 export function buildMachine(CANNON) {
@@ -69,11 +83,11 @@ export function buildMachine(CANNON) {
 
   const M = {};
   for (const n of ["wood", "steel", "glass", "brass", "dom"]) M[n] = new CANNON.Material(n);
-  // контакты домино — жёсткие и малоинерционные (stiff 1e8, relax 2):
-  // при дефолтных relax 3 волна «висит клином» по 10+ секунд
-  const cm = (a, b, fr, rest, eq) =>
-    world.addContactMaterial(new CANNON.ContactMaterial(a, b,
-      { friction: fr, restitution: rest, ...eq }));
+  // единый жёсткий малоинерционный режим контактов: при дефолтных
+  // relax 3 лёгкие тела «висят» друг на друге (клин домино по 10+ с)
+  const eq = { contactEquationStiffness: 1e8, contactEquationRelaxation: 2 };
+  const cm = (a, b, fr, rest) =>
+    world.addContactMaterial(new CANNON.ContactMaterial(a, b, { friction: fr, restitution: rest, ...eq }));
   cm(M.wood, M.wood, P.fr.woodWood, P.rest.woodWood);
   cm(M.steel, M.wood, P.fr.steelWood, P.rest.steelWood);
   cm(M.glass, M.wood, P.fr.glassWood, P.rest.glassWood);
@@ -81,12 +95,17 @@ export function buildMachine(CANNON) {
   cm(M.wood, M.brass, P.fr.woodBrass, P.rest.woodBrass);
   cm(M.steel, M.brass, P.fr.steelBrass, P.rest.steelBrass);
   cm(M.glass, M.brass, P.fr.glassBrass, P.rest.glassBrass);
-  const domEq = { contactEquationStiffness: 1e8, contactEquationRelaxation: 2 };
-  cm(M.dom, M.dom, 0.10, 0.12, domEq);       // грани: щелчок без рикошета
-  cm(M.dom, M.wood, 0.80, 0.10, domEq);      // подошва цепкая
-  cm(M.dom, M.steel, 0.25, 0.30, domEq);
-  cm(M.dom, M.glass, 0.25, 0.35, domEq);
-  cm(M.dom, M.brass, 0.30, 0.25, domEq);
+  // домино: грани без рикошета; подошва цепкая (μ 0.8) — опрокидывание
+  // у основания, а не скольжение, как у настоящих домино на дереве
+  // μ 0.01 — критично: при μ≥0.03 трение скольжения граней (нажим лежащей
+  // плашки ~0.9 Н) съедает энергию падения — каскад ползёт 0.6 с/шт.
+  // При μ 0.01 темп 0.14 с/шт, уклад плоский 77-90° (стенд tune_cascade)
+  cm(M.dom, M.dom, 0.01, 0.02);
+  cm(M.dom, M.wood, 0.80, 0.01);
+  cm(M.dom, M.steel, 0.25, 0.30);
+  cm(M.dom, M.glass, 0.25, 0.35);   // дом7 → шарик② (запуск) и шарик② → дом8
+  cm(M.dom, M.brass, 0.30, 0.25);
+  cm(M.wood, M.dom, 0.30, 0.05);    // шар-орех① бьёт домино волны①
 
   const V = (x, y, z) => new CANNON.Vec3(x, y, z);
   const spec = [], byName = {}, dynamics = [], events = [];
@@ -134,64 +153,48 @@ export function buildMachine(CANNON) {
 
   /* ================= СТАТИКА ================= */
   const d = P.desk;
-  staticBox("floor", [8, 0.1, 8], [2.5, P.floorY - 0.05, 0], "walnut", null, "floor");
+  staticBox("floor", [10, 0.1, 8], [3.5, P.floorY - 0.05, 0], "walnut", null, "floor");
   spec.push({ name: "walls", mat: "walls", dynamic: false, shape: "room", pos: [0, 0, 0] });
   staticBox("desk", [d.x1 - d.x0, d.thick, 2 * d.z], [(d.x0 + d.x1) / 2, d.top - d.thick / 2, 0], "walnut", null, "desk");
-  for (const lx of [d.x0 + 0.05, 1.3, 2.7, 4.1, 5.5, d.x1 - 0.05])
+  for (const lx of [d.x0 + 0.05, 1.3, 2.7, 4.1, 5.5, 6.3, d.x1 - 0.05])
     for (const lz of [-d.z + 0.05, d.z - 0.05])
       post("deskleg" + lx.toFixed(2) + lz.toFixed(2), lx, lz, d.top - d.thick, P.floorY, "walnut", 0.06, 0.06);
-  staticBox("base", [6.0, 0.02, 0.42], [2.95, -0.03, 0], "walnut", null, "base");
+  staticBox("base", [7.4, 0.02, 0.42], [3.45, -0.03, 0], "walnut", null, "base");
 
-  // горка (v3): пол 20° + стенки + стойки
+  // горка: пол 20° + стенки + стойки
   const ramp = board("ramp", [P.rampX0, P.rampY0], [P.rampX1, P.rampY1],
     P.rampW, P.rampT, "pine", {});
   for (const [nx, lx] of [["1", 0.16], ["2", 0.30]])
     post("rampleg" + nx, lx, 0, ramp.lineY(lx) - P.rampT, -0.02, "pine", 0.05, 0.16);
 
-  // ярус A: дорожка 0.52..1.90 (верх 0.10) + направляющие + ноги
+  // ярус A: плоский прогон 0.52..2.40 + направляющие у горки + ноги
   staticBox("runway", [P.runX1 - P.runX0, P.runH, P.runW],
     [(P.runX0 + P.runX1) / 2, P.runTop - P.runH / 2, 0], "pine", null, "runway");
   for (const s of [1, -1])
     staticBox("guide" + (s > 0 ? "R" : "L"), [0.40, 0.045, 0.010],
       [0.72, P.runTop + 0.0225, s * 0.105], "pine", null, "guide");
-  post("runfoot1", 0.68, 0, P.runTop - P.runH, -0.02, "pine", 0.06, 0.18);
-  post("runfoot2", 1.70, 0, P.runTop - P.runH, -0.02, "pine", 0.06, 0.18);
+  for (const lx of [0.68, 1.70, 2.30])
+    post("runfoot" + lx.toFixed(2), lx, 0, P.runTop - P.runH, -0.02, "pine", 0.06, 0.18);
 
-  // жёлоб-регулятор: 1.78..4.62, пологий спуск
-  const chute = board("chute", [P.chuteX0, P.chuteY0], [P.chuteX1, P.chuteY1],
+  // жёлоб составной: голова 8° + тело 0.4° (стык на 2.75)
+  const chH = board("chuteHead", [P.chH0, P.chHY0], [P.chH1, P.chHY1],
     P.chuteW, P.chuteT, "pine", { wallH: 0.030 });
-  for (const [nx, lx] of [["a", 2.00], ["b", 3.00], ["c", 3.70]])  // три ноги: прогон 2.6 м
-    post("chuteleg" + nx, lx, 0, chute.lineY(lx) - P.chuteT, -0.02, "pine", 0.04, 0.14);
+  const chB = board("chuteBody", [P.chB0, P.chBY0], [P.chB1, P.chBY1],
+    P.chuteW, P.chuteT, "pine", { wallH: 0.030 });
+  post("chutelegH", 2.55, 0, chH.lineY(2.55) - P.chuteT, -0.02, "pine", 0.04, 0.14);
+  for (const lx of [3.30, 4.10, 4.80])
+    post("chuteleg" + lx.toFixed(2), lx, 0, chB.lineY(lx) - P.chuteT, -0.02, "pine", 0.04, 0.14);
 
-  // маятник ①: стойки от яруса A, перекладина
-  post("g1postL", P.piv1[0], -0.11, P.piv1[1] + 0.055, P.runTop, "pine", 0.05, 0.05);
-  post("g1postR", P.piv1[0], 0.11, P.piv1[1] + 0.055, P.runTop, "pine", 0.05, 0.05);
-  staticBox("g1bar", [0.05, 0.05, 0.27], [P.piv1[0], P.piv1[1] + 0.055, 0], "pine", null, "g1bar");
-  // тумба①: наклонная площадка 15° (шарик② при тапе скатывается сам)
-  const teeQ = new CANNON.Quaternion();
-  teeQ.setFromAxisAngle(new CANNON.Vec3(0, 0, 1), -20 * Math.PI / 180);  // tan20=0.36 > 0.32: скатывание
-  staticBox("tee1", [0.024, 0.006, 0.030],
-    [P.tee1X - 0.003, P.tee1Top - 0.003, 0], "pine", teeQ, "tee");
-  // опора площадки — узкий пост СЗАДИ (1.445): за зоной падения дом7 (край 1.41)
-  // и за дугой взмаха головы (максимум вылета 1.396+10 мм)
-  // опора площадки — КРОНШТЕЙН СБОКУ от стойки молота① (g1postR): доска в z=+0.05,
-  // от z=0.11 к z=0.015 — вне головы молота (до z=0.03) и вне падения дом7 (z±0.022)
-  staticBox("tee1arm", [P.tee1X - P.piv1[0] + 0.06, 0.006, 0.05],
-    [(P.piv1[0] + P.tee1X + 0.06) / 2 - 0.01, P.tee1Top - 0.004, 0.062], "pine", null, "bracket");
+  // пьедестал шарика② (дизайн, давший полную цепь до звона)
+  staticBox("ped1", [0.022, P.pedTop - P.runTop, 0.030],
+    [P.pedX, (P.pedTop + P.runTop) / 2, 0], "walnut", null, "post");
 
   // нижняя полоса: накладка на столешнице под волну ②
   staticBox("base2", [P.base2X1 - P.base2X0, P.base2T, 0.42],
     [(P.base2X0 + P.base2X1) / 2, P.base2Top - P.base2T / 2, 0], "walnut", null, "base2");
 
-  // (маятник① упразднён)
-  // (маятник① упразднён)
-  // маятник ②-боёк: стойки от полосы, перекладина
-  post("g2postL", P.piv2[0], -0.11, P.piv2[1] + 0.055, P.base2Top, "pine", 0.05, 0.05);
-  post("g2postR", P.piv2[0], 0.11, P.piv2[1] + 0.055, P.base2Top, "pine", 0.05, 0.05);
-  staticBox("g2bar", [0.05, 0.05, 0.27], [P.piv2[0], P.piv2[1] + 0.055, 0], "pine", null, "g2bar");
-
   // подставка колокола (столешница → юбка)
-  post("bellpost", P.bellX, 0, P.bellY, d.top, "walnut", 0.022, 0.022);  // узкая: не на дуге взмаха
+  post("bellpost", P.bellX, 0, P.bellY, d.top, "walnut", 0.022, 0.022);
 
   /* ================= ДИНАМИКА ================= */
   function addDyn(name, mass, mat, shapes, pos, kind, extra = {}) {
@@ -206,65 +209,47 @@ export function buildMachine(CANNON) {
     return body;
   }
 
-  // шар ① Ø32 (135 г) — на горке
-  addDyn("ball", 4 / 3 * Math.PI * P.ballR ** 3 * P.dens.steel, "steel",
+  // шар ① Ø32 — орех, 12 г: лёгкий триггер, как в настоящих машинах
+  // (тяжёлый стальной шар «переезжал» волну, как бульдозер)
+  addDyn("ball", 4 / 3 * Math.PI * P.ballR ** 3 * P.dens.walnut, "walnut",
     [{ shape: new CANNON.Sphere(P.ballR) }],
     [P.ballX0, ramp.lineY(P.ballX0) + P.ballR + P.rampT / 2, 0], "sphere",
     { angularDamping: 0.10, linearDamping: 0.01,
       spec: { size: [2 * P.ballR, 2 * P.ballR, 2 * P.ballR] } });
 
-  // шарик ② Ø16 (сталь 17 г) — на тумбе①: молот① тапает его на взмахе
-  addDyn("ball2", 4 / 3 * Math.PI * P.ball2R ** 3 * P.dens.steel, "steel",
+  // шарик ② Ø12 — стекло 2.3 г. СТОИТ на пьедестале у края яруса:
+  // без падения дом7 неподвижен (это лечит «сам катится на старте»).
+  // Позиция — на касательной дуги кончика дом7 (θ≈50°): кончик хлещет
+  // его вперёд, и шарик улетает за край — сразу вне зоны кучи плашек.
+  addDyn("ball2", 4 / 3 * Math.PI * P.ball2R ** 3 * P.dens.glass, "glass",
     [{ shape: new CANNON.Sphere(P.ball2R) }],
-    [P.tee1X, P.tee1Top + P.ball2R, 0], "sphere",
+    [P.ball2X, P.pedTop + P.ball2R, 0], "sphere",
     { angularDamping: 0.10, linearDamping: 0.01,
       spec: { size: [2 * P.ball2R, 2 * P.ball2R, 2 * P.ball2R] } });
 
-  // волна ① (14, ярус A) + волна ② (20, полоса)
+  // волна ① (8) + волна ② (46) — реальные домино
   for (let i = 0; i < P.domN1; i++)
-    addDyn("dom" + i, P.domSize[0] * P.domSize[1] * P.domSize[2] * P.dens.pine, "dom",
+    addDyn("dom" + i, P.domSize[0] * P.domSize[1] * P.domSize[2] * P.dens.dom, "dom",
       [{ shape: new CANNON.Box(V(P.domSize[0] / 2, P.domSize[1] / 2, P.domSize[2] / 2)) }],
       [P.dom1X0 + i * P.domStep, P.runTop + P.domSize[1] / 2, 0], "dom",
       { angularDamping: 0.02, linearDamping: 0.005, spec: { size: [...P.domSize] } });
   for (let i = 0; i < P.domN2; i++)
-    addDyn("dom" + (P.domN1 + i), P.domSize[0] * P.domSize[1] * P.domSize[2] * P.dens.pine, "dom",
+    addDyn("dom" + (P.domN1 + i), P.domSize[0] * P.domSize[1] * P.domSize[2] * P.dens.dom, "dom",
       [{ shape: new CANNON.Box(V(P.domSize[0] / 2, P.domSize[1] / 2, P.domSize[2] / 2)) }],
       [P.dom2X0 + i * P.domStep, P.base2Top + P.domSize[1] / 2, 0], "dom",
       { angularDamping: 0.02, linearDamping: 0.005, spec: { size: [...P.domSize] } });
 
-  // маятники: рука 6×420 + голова 20×20×60 (сосна ~10 г)
-  function addMallet(name, piv) {
-    // физмат «сосна»: с дом7 сцепляется (dom-wood 0.80 — плашка тащит голову, длинный
-    // импульс), а тап по шарику — steel-wood 0.32/0.20. Так работало в зелёной v4 (0.78).
-    const b = addDyn(name,
-      (0.006 * P.armLen * 0.006 + P.headSize[0] * P.headSize[1] * P.headSize[2]) * P.dens.pine,
-      "pine",
-      [{ shape: new CANNON.Box(V(P.shaftR, P.armLen / 2, P.shaftR)), off: V(0, -P.armLen / 2, 0) },
-       { shape: new CANNON.Box(V(P.headSize[0] / 2, P.headSize[1] / 2, P.headSize[2] / 2)),
-         off: V(0, -P.armLen, 0) }],
-      [piv[0], piv[1], 0], "mallet",
-      { angularDamping: 0.02, linearDamping: 0.005,
-        spec: { armLen: P.armLen, head: [...P.headSize] } });
-    const anchor = new CANNON.Body({ mass: 0 });
-    anchor.position.set(piv[0], piv[1], 0);
-    world.addBody(anchor); byName[name + "Anchor"] = anchor;
-    world.addConstraint(new CANNON.HingeConstraint(anchor, b, {
-      pivotA: V(0, 0, 0), axisA: V(0, 0, 1), pivotB: V(0, 0, 0), axisB: V(0, 0, 1) }));
-    return b;
-  }
-  addMallet("mallet1", P.piv1);
-  addMallet("mallet2", P.piv2);
-
-  // колокол: латунный Ø58×75, 800 г — юбка на дуге 16° маятника②
+  // колокол: латунный Ø58×75, 150 г — настоящий настольный; кончик
+  // дом53 хлещет юбку (событие dom53×bell = звон)
   addDyn("bell", P.bellMass, "brass",
     [{ shape: new CANNON.Box(V(0.029, 0.015, 0.029)), off: V(0, 0.015, 0) },
      { shape: new CANNON.Box(V(0.025, 0.0125, 0.025)), off: V(0, 0.0425, 0) },
      { shape: new CANNON.Box(V(0.020, 0.010, 0.020)), off: V(0, 0.065, 0) }],
     [P.bellX, P.bellY, 0], "bell",
-    { angularDamping: 0.50, linearDamping: 0.10, spec: { bell: [0.058, 0.075] } });
+    { angularDamping: 0.35, linearDamping: 0.06, spec: { bell: [0.058, 0.075] } });
 
   /* ================= события ================= */
-  const listen = ["ball", "ball2", "mallet1", "mallet2", "bell",
+  const listen = ["ball", "ball2", "bell",
     ...Array.from({ length: P.domN1 + P.domN2 }, (_, i) => "dom" + i)];
   const lastEv = {};
   for (const n of listen) byName[n].addEventListener("collide", e => {
@@ -299,21 +284,19 @@ export function buildMachine(CANNON) {
     const ang = n => +tilt(byName[n]).toFixed(0);
     const domAng1 = Array.from({ length: P.domN1 }, (_, i) => ang("dom" + i));
     const domAng2 = Array.from({ length: P.domN2 }, (_, i) => ang("dom" + (P.domN1 + i)));
-    const malDeg = b => byName[b] ? (() => {
-      const u = byName[b].quaternion.vmult(V(0, -1, 0));
-      return +(Math.atan2(u.x, -u.y) * 180 / Math.PI).toFixed(1);
-    })() : 0;
-    const bellEv = events.filter(e => (e.a === "bell" || e.b === "bell") &&
-      (e.a === "mallet2" || e.b === "mallet2"));
+    // звон = любой удар по колоколу с v>0.15 (кончик дом53 / что угодно)
+    const bellEv = events.filter(e => (e.a === "bell" || e.b === "bell") && e.v > 0.15);
     return {
       t: +t.toFixed(2),
       ball: { p: byName.ball.position.toArray().map(v => +v.toFixed(3)),
               v: +byName.ball.velocity.length().toFixed(2) },
       ball2: byName.ball2 ? { p: byName.ball2.position.toArray().map(v => +v.toFixed(3)),
                v: +byName.ball2.velocity.length().toFixed(2) } : null,
-      domAng1, domFallen1: domAng1.filter(a => a > 50).length,
-      domAng2, domFallen2: domAng2.filter(a => a > 50).length,
-      mallet1Deg: malDeg("mallet1"), mallet2Deg: malDeg("mallet2"),
+      domAng1, domFallen1: domAng1.filter(a => a > 40).length,
+      // последняя плашка② заканчивает навалившись на подставку колокола (~34°) —
+      // драп «ударил и облокотился», для неё порог >30
+      domAng2, domFallen2: domAng2.slice(0, -1).filter(a => a > 40).length
+        + (domAng2[domAng2.length - 1] > 30 ? 1 : 0),
       bellTilt: +tilt(byName.bell).toFixed(1),
       bellHits: bellEv.length, firstBellT: bellEv.length ? bellEv[0].t : 0,
       allRest: dynamics.every(d => d.body.velocity.length() < 0.008 && d.body.angularVelocity.length() < 0.02),

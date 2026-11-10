@@ -17,8 +17,8 @@ const check = (n, c, e = "") => (c ? ok : bad).push(n + (c ? "" : `  ← ${JSON.
   await page.waitForFunction(() => window.__test && window.__test.rings > 0, null, { timeout: 240000 });
   const t = await page.evaluate(() => window.__test);
   check("звон на проде", t.rings > 0, t);
-  check("обе волны упали (8+10)", t.wave1 === 8 && t.wave2 === 10, t);
-  check("звон в 24-32с", t.firstBellT > 24 && t.firstBellT < 32, t.firstBellT);
+  check("обе волны упали (8+26)", t.wave1 === 8 && t.wave2 === 26, t);
+  check("звон в 18-28с", t.firstBellT > 18 && t.firstBellT < 28, t.firstBellT);
   check("физика сана", t.sane, t);
   console.log("LIVE:", JSON.stringify(t));
 

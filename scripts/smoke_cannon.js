@@ -48,7 +48,7 @@ const check = (name, cond, extra = "") =>
   await page.waitForFunction(() => window.__test && window.__test.rings > 0, null, { timeout: 240000 });
   const t1 = await page.evaluate(() => window.__test);
   check("опыт дошёл до звона", t1.rings > 0 && t1.bellHits > 0, t1);
-  check("волны упали (8+26)", t1.wave1 === 8 && t1.wave2 === 26, t1);
+  check("волны упали (8+46)", t1.wave1 === 8 && t1.wave2 === 46, t1);
 
   // пауза/продолжение
   await page.keyboard.press(" ");
@@ -71,10 +71,10 @@ const check = (name, cond, extra = "") =>
   await page.waitForTimeout(2200);
   await page.screenshot({ path: "/home/z/my-project/work/smoke_idle.png" });
   await page.click("#btnRun");
-  // фазовые скриншоты: жёлоб (t~9с), волна② в разгаре (t~26), звон
-  await page.waitForFunction(() => window.__test && window.__test.t >= 9, null, { timeout: 90000 });
+  // фазовые скриншоты: жёлоб (t~6с), волна② в разгаре (t~12), звон
+  await page.waitForFunction(() => window.__test && window.__test.t >= 6, null, { timeout: 60000 });
   await page.screenshot({ path: "/home/z/my-project/work/smoke_chute.png" });
-  await page.waitForFunction(() => window.__test && window.__test.wave2 >= 3, null, { timeout: 120000 });
+  await page.waitForFunction(() => window.__test && window.__test.wave2 >= 3, null, { timeout: 90000 });
   await page.screenshot({ path: "/home/z/my-project/work/smoke_wave2.png" });
   await page.waitForFunction(() => window.__test && window.__test.rings > 0, null, { timeout: 180000 });
   await page.screenshot({ path: "/home/z/my-project/work/smoke_ring.png" });

@@ -44,7 +44,7 @@ button:active{transform:translateY(1px)}
 <div id="stage">
   <div id="top">
     <h1>Машина Голдберга <b>· реальная физика</b></h1>
-    <span id="sub">cannon-es · цепочка ~22 с · волны 8+26, жёсткие контакты домино · 120 Гц</span>
+    <span id="sub">cannon-es · цепочка ~15 с · реальные домино 60×28×8, каскад 0.12 с/плашка · 120 Гц</span>
     <div id="btns">
       <button id="btnRun" title="Сбросить и запустить (Enter)">▶ Запуск</button>
       <button id="btnPause" title="Пауза (Space)">⏸</button>
@@ -80,24 +80,24 @@ $("stage").prepend(renderer.domElement);
 
 const scene = new T.Scene();
 scene.background = new T.Color(0xf0e9db);
-scene.fog = new T.Fog(0xf0e9db, 12, 26);
+scene.fog = new T.Fog(0xf0e9db, 18, 46);
 
 const camera = new T.PerspectiveCamera(46, innerWidth / innerHeight, 0.05, 60);
-camera.position.set(3.15, 1.8, 3.8);
+camera.position.set(5.2, 2.0, 6.8);
 const controls = new T.OrbitControls(camera, renderer.domElement);
-controls.target.set(2.9, 0.05, 0);
+controls.target.set(3.49, 0.03, 0);
 controls.enableDamping = true;
 controls.maxPolarAngle = Math.PI * 0.495;
-controls.minDistance = 0.6; controls.maxDistance = 8;
+controls.minDistance = 0.6; controls.maxDistance = 13;
 
 /* ---------- свет ---------- */
 scene.add(new T.HemisphereLight(0xfff6e8, 0xcabfa8, 0.6));
 const sun = new T.DirectionalLight(0xfff2df, 1.7);
-sun.position.set(3.2, 4.2, 3.0);
+sun.position.set(4.8, 5.2, 4.0);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.left = -3.4; sun.shadow.camera.right = 3.4;
-sun.shadow.camera.top = 2.4; sun.shadow.camera.bottom = -1.4;
+sun.shadow.camera.left = -5.0; sun.shadow.camera.right = 5.0;
+sun.shadow.camera.top = 3.2; sun.shadow.camera.bottom = -1.6;
 sun.shadow.camera.near = 0.5; sun.shadow.camera.far = 12;
 sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.004;
 scene.add(sun);
@@ -135,6 +135,8 @@ const MAT = {
   pine: new T.MeshStandardMaterial({ map: woodTex("#e6c185", "#b1793f", "#f2dcb4", 26), roughness: .82, metalness: 0 }),
   walnut: new T.MeshStandardMaterial({ map: woodTex("#8a6440", "#6b4a2c", "#a98a63", 18), roughness: .78, metalness: 0 }),
   steel: new T.MeshStandardMaterial({ color: 0xd9dde2, roughness: .18, metalness: .95 }),
+  glass: new T.MeshStandardMaterial({ color: 0xd7ecf2, roughness: .05, metalness: .1,
+    transparent: true, opacity: .82 }),
   brass: new T.MeshStandardMaterial({ color: 0xd9a941, roughness: .32, metalness: .9 }),
   bell: new T.MeshStandardMaterial({ color: 0xc9992e, roughness: .28, metalness: .92 }),
   domFace: new T.MeshStandardMaterial({ color: 0xfdfdf6, roughness: .5 }),
@@ -229,7 +231,8 @@ for (const s of m.spec) {
   else if (kind === "dom") g = dominoMeshes();
   else if (kind === "sphere") {
     g = new T.Group();
-    const mesh = new T.Mesh(new T.SphereGeometry(s.size[0] / 2, 40, 28), MAT.steel);
+    const mat = s.mat === "glass" ? MAT.glass : s.mat === "walnut" ? MAT.walnut : MAT.steel;
+    const mesh = new T.Mesh(new T.SphereGeometry(s.size[0] / 2, 40, 28), mat);
     mesh.castShadow = mesh.receiveShadow = true;
     g.add(mesh);
   } else if (s.size) {                         // статика: box из spec
@@ -254,13 +257,15 @@ for (const s of m.spec) {
 /* стены комнаты (визуал) и паркет */
 {
   const wg = new T.Group();
-  const back = new T.Mesh(new T.PlaneGeometry(4.4, 2.4), MAT.wall);
-  back.position.set(1.0, .35, -.62); back.receiveShadow = true; wg.add(back);
-  const side = new T.Mesh(new T.PlaneGeometry(2.4, 2.4), MAT.wall);
-  side.rotation.y = Math.PI / 2; side.position.set(-.42, .35, .55); side.receiveShadow = true; wg.add(side);
+  const back = new T.Mesh(new T.PlaneGeometry(9.6, 2.4), MAT.wall);
+  back.position.set(3.5, .35, -.62); back.receiveShadow = true; wg.add(back);
+  const sideL = new T.Mesh(new T.PlaneGeometry(9.6, 2.4), MAT.wall);
+  sideL.rotation.y = Math.PI / 2; sideL.position.set(-.55, .35, 0); sideL.receiveShadow = true; wg.add(sideL);
+  const sideR = new T.Mesh(new T.PlaneGeometry(9.6, 2.4), MAT.wall);
+  sideR.rotation.y = -Math.PI / 2; sideR.position.set(7.6, .35, 0); sideR.receiveShadow = true; wg.add(sideR);
   scene.add(wg);
-  const pf = new T.Mesh(new T.BoxGeometry(6, .1, 6), MAT.floorRoom);
-  pf.position.y = m.P.floorY - .05; pf.receiveShadow = true; scene.add(pf);
+  const pf = new T.Mesh(new T.BoxGeometry(11, .1, 11), MAT.floorRoom);
+  pf.position.set(3.5, m.P.floorY - .05, 0); pf.receiveShadow = true; scene.add(pf);
 }
 
 /* ---------- звук: в момент удара (события приходят из физики) ---------- */
@@ -304,14 +309,12 @@ function tok(v) { voice([[120, 1, .16, .002], [330, .5, .1, .002], [900, .25, .0
   .2 + .2 * Math.min(v / 3, 1), .3); }
 
 const audioPairs = [
-  [/mallet2.*bell|bell.*mallet2/, e => e.v > .05 && ring(e.v)],
-  [/mallet1.*dom\d|dom\d.*mallet1/, e => e.v > .05 && tok(e.v)],
-  [/mallet1.*ball2|ball2.*mallet1/, e => e.v > .05 && tok(e.v)],
+  // звон: кончик последнего домино хлещет юбку колокола
+  [/dom\d+.*bell|bell.*dom\d+/, e => e.v > .05 && ring(e.v)],
   [/dom\d.*dom\d/, e => e.v > .05 && clack(e.v)],
   [/ball2?.*dom\d|dom\d.*ball2?/, e => e.v > .05 && clack(e.v * .8)],
-  [/mallet2.*dom\d|dom\d.*mallet2/, e => e.v > .05 && tok(e.v)],
   [/ball.*runway|runway.*ball|ball.*rampFloor|rampFloor.*ball/, e => e.v > .05 && tok(e.v * .7)],
-  [/ball2.*chuteFloor|chuteFloor.*ball2/, e => e.v > .05 && tok(e.v * .5)],
+  [/ball2.*chute|chute.*ball2/, e => e.v > .05 && tok(e.v * .5)],
 ];
 let sndIdx = 0;
 function pumpAudio() {
@@ -333,7 +336,7 @@ function updateHUD() {
 }
 
 /* ---------- цикл: физика 120 Гц, рендер rAF ---------- */
-let running = false, paused = false, acc = 0, lastBell = 0;
+let running = false, paused = false, acc = 0, lastBell = 0, bellAt = 0;
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min((now - (frame.last || now)) / 1000, params.has("test") ? .5 : .1); frame.last = now;
@@ -346,17 +349,18 @@ function frame(now) {
     let n = 0;
     while (acc >= m.dt && n < cap) { m.step(); acc -= m.dt; n++; simT += m.dt; }
     pumpAudio();
-    const bellEv = m.events.filter(e => /mallet2?/.test(e.a + e.b) && /bell/.test(e.a + e.b));
+    const bellEv = m.events.filter(e => /bell/.test(e.a + e.b) && e.v > 0.25);
     if (bellEv.length > lastBell) {
       rings += bellEv.length - lastBell;
       lastEvent = `🔔 ЗВОНОК №${rings}`;
       lastBell = bellEv.length;
+      if (!bellAt) bellAt = simT;
     }
-    // авто-стоп: только после звона (в длинной цепочке медленные фазы дают
-    // ложный покой: волна ползёт 0.02 м/с — это не конец)
-    if (rings > 0 && simT > 3 && m.probe().allRest) {
+    // авто-стоп: через 2.5 с после звона (опыт завершён; хвост волны после
+    // звона не показываем — его релаксация не часть истории)
+    if (bellAt && simT > bellAt + 2.5) {
       running = false;
-      lastEvent = `опыт завершён: 🔔 ×${rings} на ${simT.toFixed(0)}-й секунде`;
+      lastEvent = `опыт завершён: 🔔 на ${bellAt.toFixed(1)}-й секунде`;
     }
     if (simT > 90) { running = false; lastEvent = "останов по таймауту"; }
   }
@@ -418,7 +422,7 @@ addEventListener("pointerup", () => {
 /* ---------- кнопки ---------- */
 function resetAll() {
   m.reset();
-  simT = 0; rings = 0; lastBell = 0; sndIdx = 0;
+  simT = 0; rings = 0; lastBell = 0; bellAt = 0; sndIdx = 0;
   lastEvent = "нажмите «Запуск»";
   updateHUD();
 }
