@@ -33,7 +33,8 @@ while (m.t < 60) {
     driftBeforeLaunch = Math.max(driftBeforeLaunch, dx);
   }
   p.domAng1.forEach((a, i) => { if (a > 40 && fall1["d" + i] === undefined) fall1["d" + i] = +m.t.toFixed(2); });
-  p.domAng2.forEach((a, i) => { if (a > 40 && fall2["d" + i] === undefined) fall2["d" + i] = +m.t.toFixed(2); });
+  p.domAng2.forEach((a, i) => { const th = i === p.domAng2.length - 1 ? 10 : 40;   // финалист-120 опирается на юбку колокола
+    if (a > th && fall2["d" + i] === undefined) fall2["d" + i] = +m.t.toFixed(2); });
   if (!ball1Rest && m.byName.ball.velocity.length() < 0.03 && m.t > 2) ball1Rest = +m.t.toFixed(1);
   if (p.bellHits > 0 && !bellT) bellT = p.firstBellT;
   if (p.bellHits > 0 && m.t - bellT > 1.2) break;   // звон + 1.2с на укладку
@@ -42,7 +43,7 @@ while (m.t < 60) {
 const p = m.probe();
 const pace1 = fall1.d0 !== undefined && fall1.d7 !== undefined ? (fall1.d7 - fall1.d0) / 7 : null;
 const first2 = fall2.d0, last2 = fall2["d" + (m.P.domN2 - 1)];
-const pace2 = first2 !== undefined && last2 !== undefined ? (last2 - first2) / (m.P.domN2 - 1) : null;
+const pace2 = first2 !== undefined && last2 !== undefined ? (last2 - first2) / (m.P.domN2 - 2) : null;   // финалист — за скобками темпа
 
 console.log("=== ЗАПУСК ШАРИКА② (каузальность) ===");
 console.log("событие dom7×ball2:", launch ? `t=${launch.t} v=${launch.v}` : "ОТСУТСТВУЕТ",
@@ -63,6 +64,7 @@ const d8 = ev(/ball2×dom8|dom8×ball2/);
 console.log("  шарик② → дом8 (старт волны②):   ", d8 ? d8.t + " v=" + d8.v : "—");
 const bl = m.events.find(e => /bell/.test(e.a + "×" + e.b) && !/post/.test(e.a + "×" + e.b) && e.v > 0.15);
 console.log("  🔔 ЗВОНА (удар по колоколу):     ", bl ? bl.t + " v=" + bl.v : "—");
+console.log("  🎵 НОТЫ ксилофона-ладов:         ", p.xyloNotes.join(", "));
 
 console.log("\n=== ТЕМП И УКЛАД ===");
 console.log("волна① падения:", JSON.stringify(fall1), "→ темп", pace1 ? pace1.toFixed(2) + " с/шт" : "—");

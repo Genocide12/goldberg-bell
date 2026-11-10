@@ -44,12 +44,13 @@ button:active{transform:translateY(1px)}
 <div id="stage">
   <div id="top">
     <h1>Машина Голдберга <b>· реальная физика</b></h1>
-    <span id="sub">cannon-es · цепочка ~15 с · реальные домино 60×28×8, каскад 0.12 с/плашка · 120 Гц</span>
+    <span id="sub">cannon-es · шоу ~13 с · 8 плашек → хлыст → жёлоб с нотами 🎵 → 34 плашки → финалист-120 → 🔔 · 120 Гц</span>
     <div id="btns">
       <button id="btnRun" title="Сбросить и запустить (Enter)">▶ Запуск</button>
       <button id="btnPause" title="Пауза (Space)">⏸</button>
       <button id="btnReset" title="Сброс (R)">↺</button>
       <button id="btnSound" title="Звук">🔊</button>
+      <button id="btnCam" title="Кино-камера: авто-планы за действием (C)">🎬</button>
     </div>
   </div>
   <div id="hud"><span id="hudEvent">нажмите «Запуск»</span><span id="hudStats"></span></div>
@@ -307,6 +308,12 @@ function clack(v) { voice([[1600, .35, .012, .001], [520, .45, .022, .001]],
   .05 + .13 * Math.min(v / 2, 1), .05); }
 function tok(v) { voice([[120, 1, .16, .002], [330, .5, .1, .002], [900, .25, .06, .002]],
   .2 + .2 * Math.min(v / 3, 1), .3); }
+// нота ксилофона-ладов: латунный «дзынь» на частоте лада (D-E-F#-A-B)
+const FRET_FREQ = [293.66, 329.63, 369.99, 440.0, 493.88];
+function note(i) {
+  const f = FRET_FREQ[i];
+  voice([[f, .8, .5, .002], [f * 2, .3, .25, .002], [f * 3.01, .12, .12, .002]], .16, .55);
+}
 
 const audioPairs = [
   // звон: кончик последнего домино хлещет юбку колокола
@@ -316,13 +323,16 @@ const audioPairs = [
   [/ball.*runway|runway.*ball|ball.*rampFloor|rampFloor.*ball/, e => e.v > .05 && tok(e.v * .7)],
   [/ball2.*chute|chute.*ball2/, e => e.v > .05 && tok(e.v * .5)],
 ];
-let sndIdx = 0;
+let sndIdx = 0, fretIdx = 0;
 function pumpAudio() {
   for (; sndIdx < m.events.length; sndIdx++) {
     const e = m.events[sndIdx];
     for (const [re, fn] of audioPairs)
       if (re.test(e.a + "×" + e.b)) { fn(e); break; }
   }
+  // ноты ксилофона: xyloNotes растёт — играем следующую
+  const notes = m.probe().xyloNotes;
+  while (fretIdx < notes.length && notes[fretIdx] <= simT) { note(fretIdx); fretIdx++; }
 }
 
 /* ---------- HUD ---------- */
@@ -332,7 +342,33 @@ function updateHUD() {
   $("hudEvent").className = lastEvent.startsWith("нажмите") ? "err" : "";
   const p = m.probe();
   $("hudStats").textContent =
-    `t ${simT.toFixed(1)}с · волны ${p.domFallen1}/${m.P.domN1} и ${p.domFallen2}/${m.P.domN2} · 🔔 ×${rings}`;
+    `t ${simT.toFixed(1)}с · волны ${p.domFallen1}/${m.P.domN1} и ${p.domFallen2}/${m.P.domN2} · 🎵 ${fretIdx}/5 · 🔔 ×${rings}`;
+}
+
+/* ---------- кино-камера: авто-планы по фазам ----------
+   До звонка камера сама летит за действием (план = фаза цепи);
+   колесо/драг OrbitControls отключают авто (режим «свободно»). */
+let cine = !params.has("test");
+function cineUpdate() {
+  if (!cine || !running) return;
+  const b2 = m.byName.ball2, w2f = m.probe().domFallen2;
+  let px, py, pz, tx, ty;
+  if (simT < 1.9) {           // план 1: старт — горка и шар
+    px = 0.55; py = 0.85; pz = 1.7; tx = 0.7; ty = 0.12;
+  } else if (simT < 4.9) {    // план 2: волна① и хлыст дом7
+    px = 2.15; py = 0.72; pz = 1.35; tx = 2.25; ty = 0.10;
+  } else if (simT < 8.6) {    // план 3: шарик② бежит по жёлобу (ноты!)
+    const k = Math.min(1, Math.max(0, (b2.position.x - 2.6) / 2.2));
+    px = 2.7 + k * 2.0; py = 0.55; pz = 1.15; tx = 2.7 + k * 2.0; ty = 0.06;
+  } else if (simT < 12.6) {   // план 4: волна② бежит к финалисту
+    const k = Math.min(1, Math.max(0, (simT - 8.6) / 3.5));
+    px = 5.2 + k * 0.9; py = 0.60; pz = 1.45; tx = 5.2 + k * 0.9; ty = 0.05;
+  } else {                    // план 5: финал — финалист и колокол
+    px = 6.35; py = 0.55; pz = 1.30; tx = 6.45; ty = 0.10;
+  }
+  const l = 0.04;             // плавность
+  camera.position.lerp(new T.Vector3(px, py, pz), l);
+  controls.target.lerp(new T.Vector3(tx, ty, 0), l);
 }
 
 /* ---------- цикл: физика 120 Гц, рендер rAF ---------- */
@@ -360,7 +396,7 @@ function frame(now) {
     // звона не показываем — его релаксация не часть истории)
     if (bellAt && simT > bellAt + 2.5) {
       running = false;
-      lastEvent = `опыт завершён: 🔔 на ${bellAt.toFixed(1)}-й секунде`;
+      lastEvent = `ФИНАЛ: 🎵 ${fretIdx} нот + 🔔 на ${bellAt.toFixed(1)}-й секунде`;
     }
     if (simT > 90) { running = false; lastEvent = "останов по таймауту"; }
   }
@@ -368,6 +404,7 @@ function frame(now) {
     g.position.copy(b.position);
     g.quaternion.copy(b.quaternion);
   }
+  cineUpdate();
   controls.update();
   if ((frame.k = (frame.k || 0) + 1) % 6 === 0) updateHUD();
   renderer.render(scene, camera);
@@ -389,8 +426,10 @@ requestAnimationFrame(frame);
 const ray = new T.Raycaster();
 const ndc = new T.Vector2();
 let drag = null;
+renderer.domElement.addEventListener("wheel", () => { cine = false; }, { passive: true });
 renderer.domElement.addEventListener("pointerdown", e => {
   if (params.has("test")) return;
+  cine = false;   // юзер рулит — авто-планы off
   ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
   const hit = ray.intersectObjects(pickables, true)[0];
@@ -422,21 +461,30 @@ addEventListener("pointerup", () => {
 /* ---------- кнопки ---------- */
 function resetAll() {
   m.reset();
-  simT = 0; rings = 0; lastBell = 0; bellAt = 0; sndIdx = 0;
+  simT = 0; rings = 0; lastBell = 0; bellAt = 0; sndIdx = 0; fretIdx = 0;
   lastEvent = "нажмите «Запуск»";
   updateHUD();
 }
 $("btnRun").onclick = () => {
   ensureAudio(); resetAll();
   running = true; paused = false;
+  cine = !params.has("test");   // кино-камера снова ведёт
+  $("btnCam").classList.toggle("off", !cine);
+  camera.position.set(0.55, 0.85, 1.7); controls.target.set(0.7, 0.12, 0);
   lastEvent = "опыт пошёл";
   updateHUD();
 };
 $("btnReset").onclick = () => { running = false; paused = false; resetAll(); };
 $("btnPause").onclick = () => { if (simT === 0) return; paused = !paused; lastEvent = paused ? "пауза" : "продолжаем"; updateHUD(); };
 $("btnSound").onclick = () => { soundOn = !soundOn; $("btnSound").classList.toggle("off", !soundOn); if (soundOn) ensureAudio(); };
+$("btnCam").onclick = () => {
+  cine = !cine;
+  $("btnCam").classList.toggle("off", !cine);
+  if (!cine) { camera.position.set(5.2, 2.0, 6.8); controls.target.set(3.49, 0.03, 0); }
+};
 addEventListener("keydown", e => {
   if (e.key === "Enter") $("btnRun").click();
+  else if (e.key === "c" || e.key === "C" || e.key === "с" || e.key === "С") $("btnCam").click();
   else if (e.key === " ") { e.preventDefault(); $("btnPause").click(); }
   else if (e.key === "r" || e.key === "R" || e.key === "к" || e.key === "К") $("btnReset").click();
 });

@@ -35,20 +35,26 @@ const check = (name, cond, extra = "") =>
   page.on("console", msg => { if (msg.type() === "error") errors.push(msg.text()); });
 
   await page.goto("http://127.0.0.1:8903/?test=1", { waitUntil: "load", timeout: 30000 });
+  await page.bringToFront();   // headless глючит rAF на неактивных страницах
   await page.waitForFunction(() => window.__ready, null, { timeout: 20000 });
   check("страница загрузилась без JS-ошибок", errors.length === 0, errors.slice(0, 3));
 
   check("canvas создан", await page.evaluate(() => !!document.querySelector("canvas")));
-  check("WebGL доступен", await page.evaluate(() => {
-    const c = document.createElement("canvas");
-    return !!(c.getContext("webgl2") || c.getContext("webgl"));
-  }));
+  check("WebGL доступен", await page.evaluate(() =>
+    !!document.querySelector("canvas").getContext("webgl2")));
 
-  // автозапуск до звона
-  await page.waitForFunction(() => window.__test && window.__test.rings > 0, null, { timeout: 240000 });
+  // запуск до звона
+  await page.click("#btnRun");
+  await page.waitForFunction(() => window.__test && window.__test.rings > 0, null, { timeout: 240000 })
+    .catch(async () => {
+      for (let i = 0; i < 6; i++) {
+        console.log("DIAG", JSON.stringify(await page.evaluate(() => window.__test || null)));
+        await page.waitForTimeout(8000);
+      }
+    });
   const t1 = await page.evaluate(() => window.__test);
   check("опыт дошёл до звона", t1.rings > 0 && t1.bellHits > 0, t1);
-  check("волны упали (8+46)", t1.wave1 === 8 && t1.wave2 === 46, t1);
+  check("волны упали (8+34)", t1.wave1 === 8 && t1.wave2 === 34, t1);
 
   // пауза/продолжение
   await page.keyboard.press(" ");
@@ -71,10 +77,14 @@ const check = (name, cond, extra = "") =>
   await page.waitForTimeout(2200);
   await page.screenshot({ path: "/home/z/my-project/work/smoke_idle.png" });
   await page.click("#btnRun");
-  // фазовые скриншоты: жёлоб (t~6с), волна② в разгаре (t~12), звон
-  await page.waitForFunction(() => window.__test && window.__test.t >= 6, null, { timeout: 60000 });
+  // фазовые скриншоты: жёлоб (t~9с), волна② в разгаре (t~26), звон
+  try {
+    await page.waitForFunction(() => window.__test && window.__test.t >= 9, null, { timeout: 90000 });
+  } catch { console.log("WAIT t>=9 FAIL", JSON.stringify(await page.evaluate(() => window.__test))); }
   await page.screenshot({ path: "/home/z/my-project/work/smoke_chute.png" });
-  await page.waitForFunction(() => window.__test && window.__test.wave2 >= 3, null, { timeout: 90000 });
+  try {
+    await page.waitForFunction(() => window.__test && window.__test.wave2 >= 3, null, { timeout: 120000 });
+  } catch { console.log("WAIT wave2>=3 FAIL", JSON.stringify(await page.evaluate(() => window.__test))); }
   await page.screenshot({ path: "/home/z/my-project/work/smoke_wave2.png" });
   await page.waitForFunction(() => window.__test && window.__test.rings > 0, null, { timeout: 180000 });
   await page.screenshot({ path: "/home/z/my-project/work/smoke_ring.png" });

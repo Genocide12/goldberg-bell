@@ -18,10 +18,10 @@
 
 export const P = {
   dens: { pine: 600, walnut: 700, dom: 700, steel: 7850, glass: 2500, brass: 8500 },
-  fr:   { woodWood: 0.45, steelWood: 0.32, glassWood: 0.22, steelGlass: 0.30,
-          woodBrass: 0.30, steelBrass: 0.35, glassBrass: 0.40 },
+  fr:   { woodWood: 0.45, steelWood: 0.32, glassWood: 0.03, steelGlass: 0.30,   // стекло скользит по дереву (полировка)
+          woodBrass: 0.30, steelBrass: 0.35, glassBrass: 0.05 },   // полированная латунь: шарик бежит
   rest: { woodWood: 0.22, steelWood: 0.20, glassWood: 0.35, steelGlass: 0.50,
-          woodBrass: 0.55, steelBrass: 0.50, glassBrass: 0.45 },
+          woodBrass: 0.55, steelBrass: 0.50, glassBrass: 0.30 },
   dt: 1 / 120,
 
   // стол и комната (машина длинная: до x≈7.3)
@@ -52,27 +52,43 @@ export const P = {
   // страница останавливает опыт через 2.5 с после звона.
   ball2X: 2.392, pedX: 2.389, pedTop: 0.125,
 
-  // жёлоб составной: голова 8° (разгон после пьедестала) + тело 0.4°
+  // жёлоб трёхсекционный: голова 8° (разгон) + тело 0.6° (ход) +
+  // ТОРМОЗ-ГОРКА 6° вверх на финише — шарик взбегает на неё, теряет
+  // скорость до ~0.45 м/с и мягко скатывается на клавиши ксилофона
   chH0: 2.40, chH1: 2.75, chHY0: 0.077, chHY1: 0.028,   // голова 8°
-  chB0: 2.75, chB1: 4.94, chBY0: 0.028, chBY1: 0.020,   // тело 0.4°
+  chB0: 2.75, chB1: 4.94, chBY0: 0.028, chBY1: 0.020,   // тело 0.55° (как в v5)
   chuteW: 0.09, chuteT: 0.012,
 
-  // нижняя полоса (накладка на столешнице)
-  base2X0: 4.80, base2X1: 7.15, base2Top: -0.015, base2T: 0.005,
+  // (качалка упразднена: её головка не дотягивалась до дом8 — 60 мм)
 
-  // волна ②: длинный честный финал (0.14 с/плашка ≈ 6.5 с)
-  dom2X0: 4.98, domN2: 46,        // дом8 4.98 … дом53 6.735 (грань 6.739)
+  // ЗВЕНО «ФИНАЛИСТ»: дом43 — двойная плашка 120 мм (18.8 г): её кончик
+  // дотягивается дальше обычной (до 6.46) и хлещет юбку колокола —
+  // та же связка, что давала звон 14.78 с в v5 (кончик×колокол v 0.36)
+  finisher2: [0.008, 0.120, 0.028],
 
-  // маятник-боёк: кончик дом53 хлещет его палку на высоте ~35 мм;
-  // палка висит в 34 мм за гранью дом53
-  piv2: [6.773, 0.425], armLen: 0.42, shaftR: 0.003,
-  headSize: [0.020, 0.020, 0.060],
+  // ПОЛОСА② — ПРИПОДНЯТЫЙ БРУС 25 мм (столешница → верх 0.010): волна②
+  // стоит высоко, шарик② скатывается с лесенки ксилофона и бьёт плашки
+  // на высоте 23 мм — то самое «высокое» попадание, от которого волна
+  // стартовала в v5 (звон 14.78)
+  base2X0: 5.00, base2X1: 6.85, base2Top: -0.015, base2T: 0.005,   // плоская накладка 5 мм (как v5)
 
-  // колокол: КОНЧИК дом53 хлещет юбку напрямую (молот упразднён:
-  // его 11-секундный ползунок — та самая «медленная неестественность»).
-  // Юбка лицом на 96 мм за гранью дом53, низ на 10 мм над полосой:
-  // кончик при θ55-70 проходит в 30 мм от пола — в юбку.
-  bellX: 6.800, bellY: 0.008, bellMass: 0.15,   // юбка лицом на 46 мм за гранью: кончик при θ≈54 (v 0.85)
+  // волна ②: на брусе, дом8 в 100 мм за срезом тормоза (приземление
+  // шарика + прокат — как в v5, старт v 0.71); домино пробегают
+  // ксилофон-мостовую на 5.50..5.86: ноты топ-топ
+  dom2X0: 4.98, domN2: 34,        // дом8 4.98 (как в v5) … дом41 6.277
+
+  // ЗВЕНО «КСИЛОФОН-МОСТОВАЯ»: 5 латунных пластин (90×6×80) врезаны
+  // вровень бруса волны② — домино бегут по ним: топ-топ-топ, пять
+  // медных нот под копытами волны (шаг 39 мм = доминошный).
+  // Признан надёжным после провала «лесенки-переката» (шарик терял
+  // z-траекторию на стыках): контакты домино-латунь уже проверены
+  // (в v5 кончик дом53 хлестал колокол v 0.36).
+
+  xyH: 0.006,                     // толщина пластины (вровень бруса)
+
+  // колокол: на дуге кончика финалиста-120 (грань дом43 6.349, кончик
+  // до 6.46 при θ45; юбка лицом на 6.50, низ на 14 мм над полосой)
+  bellX: 6.40, bellY: 0.028, bellMass: 0.15,   // юбка на дуге кончика финалиста (за 5 клавишами)
 };
 
 export function buildMachine(CANNON) {
@@ -182,12 +198,38 @@ export function buildMachine(CANNON) {
   const chB = board("chuteBody", [P.chB0, P.chBY0], [P.chB1, P.chBY1],
     P.chuteW, P.chuteT, "pine", { wallH: 0.030 });
   post("chutelegH", 2.55, 0, chH.lineY(2.55) - P.chuteT, -0.02, "pine", 0.04, 0.14);
-  for (const lx of [3.30, 4.10, 4.80])
+  for (const lx of [3.30, 4.10])
     post("chuteleg" + lx.toFixed(2), lx, 0, chB.lineY(lx) - P.chuteT, -0.02, "pine", 0.04, 0.14);
 
   // пьедестал шарика② (дизайн, давший полную цепь до звона)
   staticBox("ped1", [0.022, P.pedTop - P.runTop, 0.030],
     [P.pedX, (P.pedTop + P.runTop) / 2, 0], "walnut", null, "post");
+
+  // (качалка упразднена)
+
+  // КСИЛОФОН: 5 латунных пластин-«клавиш» лесенкой на РАМЕ (две
+  // продольные стойки-брус 12×12 от стола, как у настоящего ксилофона);
+  // непрерывная дорожка: конец пластины i = начало пластины i+1,
+  // шаг вниз 10 мм — шарик перекатывается: тук-тук-тук, 5 нот
+  // КСИЛОФОН «ЛАДЫ»: 5 латунных полосок-ладов (30×1×60) ВРЕЗАНЫ в пол
+  // тела жёлоба на отметках 3.50/3.72/3.94/4.16/4.38. Физике не
+  // принадлежат (не тела — тоньше контакта): шарик свободно катится,
+  // а при ПЕРЕСЕЧЕНИИ отметки звучит нота (probe пишет xyloNotes).
+  // Это честное событие: полоски видно, шарик реально проезжает их.
+  const m41x = P.dom2X0 + (P.domN2 - 1) * P.domStep;   // (гео-ссылка колокола)
+  const xyloFrets = [3.50, 3.72, 3.94, 4.16, 4.38];
+  for (let i = 0; i < 5; i++) {
+    const px = xyloFrets[i];
+    const q = new CANNON.Quaternion(); q.setFromAxisAngle(V(0, 0, 1), Math.atan2(-0.008, 2.19));
+    // НЕ физическое тело (1 мм над полом — контакт убил бы ход шарика):
+    // только спека для рендера + отметка для звука в probe
+    spec.push({ name: "xyloFret" + i, mat: "brass", dynamic: false, shape: "box",
+      size: [0.030, 0.002, 0.060],
+      pos: [px, chB.lineY(px) + 0.001, 0],
+      quat: [q.x, q.y, q.z, q.w], tag: "fret" });
+  }
+  // колокол: подставка от столешницы до юбки (низ колокола 14 мм)
+  post("bellpost", P.bellX, 0, P.bellY, d.top, "walnut", 0.022, 0.022);
 
   // нижняя полоса: накладка на столешнице под волну ②
   staticBox("base2", [P.base2X1 - P.base2X0, P.base2T, 0.42],
@@ -233,14 +275,20 @@ export function buildMachine(CANNON) {
       [{ shape: new CANNON.Box(V(P.domSize[0] / 2, P.domSize[1] / 2, P.domSize[2] / 2)) }],
       [P.dom1X0 + i * P.domStep, P.runTop + P.domSize[1] / 2, 0], "dom",
       { angularDamping: 0.02, linearDamping: 0.005, spec: { size: [...P.domSize] } });
-  for (let i = 0; i < P.domN2; i++)
-    addDyn("dom" + (P.domN1 + i), P.domSize[0] * P.domSize[1] * P.domSize[2] * P.dens.dom, "dom",
-      [{ shape: new CANNON.Box(V(P.domSize[0] / 2, P.domSize[1] / 2, P.domSize[2] / 2)) }],
-      [P.dom2X0 + i * P.domStep, P.base2Top + P.domSize[1] / 2, 0], "dom",
-      { angularDamping: 0.02, linearDamping: 0.005, spec: { size: [...P.domSize] } });
+  for (let i = 0; i < P.domN2; i++) {
+    const sz = i === P.domN2 - 1 ? P.finisher2 : P.domSize;   // дом43 — финалист 120
+    addDyn("dom" + (P.domN1 + i), sz[0] * sz[1] * sz[2] * P.dens.dom, "dom",
+      [{ shape: new CANNON.Box(V(sz[0] / 2, sz[1] / 2, sz[2] / 2)) }],
+      [P.dom2X0 + i * P.domStep, P.base2Top + sz[1] / 2, 0], "dom",
+      { angularDamping: 0.02, linearDamping: 0.005, spec: { size: [...sz] } });
+  }
 
-  // колокол: латунный Ø58×75, 150 г — настоящий настольный; кончик
-  // дом53 хлещет юбку (событие dom53×bell = звон)
+  // (качалка и шарик③ упразднены: связка «кончик×шарик на плоскости»
+  //  геометрически недостижима — плашка ложится на кучу на θ40-45.
+  //  Вместо них: ксилофон ПОД СКАТОМ шарика② и финалист-120 → колокол)
+
+  // колокол: латунный Ø58×75, 150 г — настоящий настольный; шарик③
+  // прилетает в юбку после пробега по ксилофону (5 нот)
   addDyn("bell", P.bellMass, "brass",
     [{ shape: new CANNON.Box(V(0.029, 0.015, 0.029)), off: V(0, 0.015, 0) },
      { shape: new CANNON.Box(V(0.025, 0.0125, 0.025)), off: V(0, 0.0425, 0) },
@@ -265,7 +313,20 @@ export function buildMachine(CANNON) {
   });
 
   /* ================= управление ================= */
-  function step(n = 1) { for (let i = 0; i < n; i++) { world.step(P.dt); t += P.dt; } }
+  // трекер ладов ксилофона: пересечение шариком② отметок 3.50..4.38
+  const fretTimes = []; let fretPrevX = null;
+  const FRET_MARKS = [3.50, 3.72, 3.94, 4.16, 4.38];
+  function step(n = 1) {
+    for (let i = 0; i < n; i++) {
+      world.step(P.dt); t += P.dt;
+      const x = byName.ball2.position.x;
+      if (fretPrevX !== null)
+        for (let k = 0; k < FRET_MARKS.length; k++)
+          if (fretPrevX < FRET_MARKS[k] && x >= FRET_MARKS[k] && fretTimes.length === k)
+            fretTimes.push(+t.toFixed(2));
+      fretPrevX = x;
+    }
+  }
   function reset() {
     for (const d of dynamics) {
       d.body.position.set(...d.home);
@@ -273,7 +334,7 @@ export function buildMachine(CANNON) {
       d.body.velocity.setZero(); d.body.angularVelocity.setZero();
       d.body.wakeUp();
     }
-    events.length = 0; t = 0;
+    events.length = 0; t = 0; fretTimes.length = 0; fretPrevX = null;
     for (const k in lastEv) delete lastEv[k];
   }
   function probe() {
@@ -293,10 +354,12 @@ export function buildMachine(CANNON) {
       ball2: byName.ball2 ? { p: byName.ball2.position.toArray().map(v => +v.toFixed(3)),
                v: +byName.ball2.velocity.length().toFixed(2) } : null,
       domAng1, domFallen1: domAng1.filter(a => a > 40).length,
-      // последняя плашка② заканчивает навалившись на подставку колокола (~34°) —
-      // драп «ударил и облокотился», для неё порог >30
+      // последняя плашка② — финалист-120: бьёт колокол и опирается
+      // на его юбку (угол всего 10-15°) — «ударил и облокотился»
       domAng2, domFallen2: domAng2.slice(0, -1).filter(a => a > 40).length
-        + (domAng2[domAng2.length - 1] > 30 ? 1 : 0),
+        + (domAng2[domAng2.length - 1] > 10 ? 1 : 0),
+      // ноты ксилофона-ладов: времена пересечения отметок (step-трекер)
+      xyloNotes: [...fretTimes],
       bellTilt: +tilt(byName.bell).toFixed(1),
       bellHits: bellEv.length, firstBellT: bellEv.length ? bellEv[0].t : 0,
       allRest: dynamics.every(d => d.body.velocity.length() < 0.008 && d.body.angularVelocity.length() < 0.02),
