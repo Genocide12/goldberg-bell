@@ -25,7 +25,8 @@ const OUT = process.argv[3] || "/home/z/my-project/work/shot";
   // прогоне, повторный — проходит.
   let ok = false;
   for (let attempt = 1; attempt <= 5 && !ok; attempt++) {
-    if (attempt > 1) await page.waitForTimeout(500);
+    await page.click("#btnRun");
+    await page.evaluate(() => { window.cine = true; });   // кино ведёт планы
     let prevT = -1, stuckCycles = 0, gaveUp = false;
     for (let i = 0; i < 90; i++) {           // опрос до ~135с
       await page.waitForTimeout(1500);
@@ -44,6 +45,7 @@ const OUT = process.argv[3] || "/home/z/my-project/work/shot";
   let shot = { notes: false, wave2: false, ring: false };
   for (let attempt = 1; attempt <= 5 && !(shot.notes && shot.wave2 && shot.ring); attempt++) {
     await page.click("#btnRun");
+    await page.evaluate(() => { window.cine = true; });   // кино ведёт планы
     let prevT = -1, stuck = 0;
     for (let i = 0; i < 100; i++) {
       await page.waitForTimeout(1200);
@@ -56,6 +58,7 @@ const OUT = process.argv[3] || "/home/z/my-project/work/shot";
         await page.screenshot({ path: OUT + "_wave2.png" }); shot.wave2 = true;
       }
       if (t.rings > 0 && !shot.ring) {
+        await page.waitForTimeout(1500);   // камера долетает к колоколу
         await page.screenshot({ path: OUT + "_ring.png" }); shot.ring = true;
       }
       if (shot.notes && shot.wave2 && shot.ring) break;
