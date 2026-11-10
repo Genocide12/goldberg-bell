@@ -44,7 +44,7 @@ button:active{transform:translateY(1px)}
 <div id="stage">
   <div id="top">
     <h1>Машина Голдберга <b>· реальная физика</b></h1>
-    <span id="sub">cannon-es · настоящие массы, трения и плотности · 120 Гц</span>
+    <span id="sub">cannon-es · цепочка ~28 с · две волны домино, два маятника, жёлоб 2.3 м · 120 Гц</span>
     <div id="btns">
       <button id="btnRun" title="Сбросить и запустить (Enter)">▶ Запуск</button>
       <button id="btnPause" title="Пауза (Space)">⏸</button>
@@ -80,24 +80,25 @@ $("stage").prepend(renderer.domElement);
 
 const scene = new T.Scene();
 scene.background = new T.Color(0xf0e9db);
+scene.fog = new T.Fog(0xf0e9db, 12, 26);
 
-const camera = new T.PerspectiveCamera(42, innerWidth / innerHeight, 0.05, 60);
-camera.position.set(1.15, 1.05, 1.95);
+const camera = new T.PerspectiveCamera(46, innerWidth / innerHeight, 0.05, 60);
+camera.position.set(2.7, 1.7, 3.55);
 const controls = new T.OrbitControls(camera, renderer.domElement);
-controls.target.set(1.0, 0.08, 0);
+controls.target.set(2.5, 0.05, 0);
 controls.enableDamping = true;
 controls.maxPolarAngle = Math.PI * 0.495;
-controls.minDistance = 0.6; controls.maxDistance = 5;
+controls.minDistance = 0.6; controls.maxDistance = 8;
 
 /* ---------- свет ---------- */
 scene.add(new T.HemisphereLight(0xfff6e8, 0xcabfa8, 0.6));
 const sun = new T.DirectionalLight(0xfff2df, 1.7);
-sun.position.set(1.6, 2.6, 1.8);
+sun.position.set(3.2, 4.2, 3.0);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.left = -1.2; sun.shadow.camera.right = 1.2;
-sun.shadow.camera.top = 1.6; sun.shadow.camera.bottom = -1.2;
-sun.shadow.camera.near = 0.5; sun.shadow.camera.far = 8;
+sun.shadow.camera.left = -3.0; sun.shadow.camera.right = 3.0;
+sun.shadow.camera.top = 2.4; sun.shadow.camera.bottom = -1.4;
+sun.shadow.camera.near = 0.5; sun.shadow.camera.far = 12;
 sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.004;
 scene.add(sun);
 const fill = new T.DirectionalLight(0xdfe8ff, 0.35);
@@ -203,7 +204,7 @@ function dominoMeshes() {
   return g;
 }
 
-/* молот: палка, латунный хомут у оси, голова из ореха */
+/* молот: палка, латунная ось на перекладине, хомут, голова из ореха */
 function malletMeshes() {
   const g = new T.Group();
   const stick = new T.Mesh(new T.CylinderGeometry(.003, .003, m.P.armLen, 12), MAT.pine);
@@ -211,6 +212,9 @@ function malletMeshes() {
   const [w, h, d] = m.P.headSize;
   const head = boxMesh(w, h, d, MAT.walnut);
   head.position.y = -m.P.armLen; head.castShadow = true; g.add(head);
+  // сквозная ось: латунный цилиндр через перекладину — читаемый шарнир
+  const axle = new T.Mesh(new T.CylinderGeometry(.004, .004, .27, 12), MAT.brass);
+  axle.rotation.x = Math.PI / 2; axle.castShadow = true; g.add(axle);
   const collar = new T.Mesh(new T.CylinderGeometry(.007, .007, .016, 14), MAT.brass);
   collar.position.y = -.014; collar.castShadow = true; g.add(collar);
   return g;
@@ -300,12 +304,14 @@ function tok(v) { voice([[120, 1, .16, .002], [330, .5, .1, .002], [900, .25, .0
   .2 + .2 * Math.min(v / 3, 1), .3); }
 
 const audioPairs = [
-  [/mallet.*bell|bell.*mallet/, e => e.v > .08 && ring(e.v)],
+  [/mallet2.*bell|bell.*mallet2/, e => e.v > .05 && ring(e.v)],
+  [/mallet1.*dom\d|dom\d.*mallet1/, e => e.v > .05 && tok(e.v)],
+  [/mallet1.*ball2|ball2.*mallet1/, e => e.v > .05 && tok(e.v)],
   [/dom\d.*dom\d/, e => e.v > .05 && clack(e.v)],
-  [/ball.*dom\d|dom\d.*ball/, e => e.v > .05 && clack(e.v * .8)],
-  [/mallet.*dom\d|dom\d.*mallet/, e => e.v > .05 && tok(e.v)],
-  [/ball.*runway|runway.*ball/, e => e.v > .05 && tok(e.v * .7)],
-  [/ball.*rampFloor|rampFloor.*ball/, e => e.v > .05 && tok(e.v * .7)],
+  [/ball2?.*dom\d|dom\d.*ball2?/, e => e.v > .05 && clack(e.v * .8)],
+  [/mallet2.*dom\d|dom\d.*mallet2/, e => e.v > .05 && tok(e.v)],
+  [/ball.*runway|runway.*ball|ball.*rampFloor|rampFloor.*ball/, e => e.v > .05 && tok(e.v * .7)],
+  [/ball2.*chuteFloor|chuteFloor.*ball2/, e => e.v > .05 && tok(e.v * .5)],
 ];
 let sndIdx = 0;
 function pumpAudio() {
@@ -323,29 +329,36 @@ function updateHUD() {
   $("hudEvent").className = lastEvent.startsWith("нажмите") ? "err" : "";
   const p = m.probe();
   $("hudStats").textContent =
-    `t ${simT.toFixed(1)}с · домино ${p.domFallen}/${m.P.domN} · молот ${Math.abs(p.malletDeg).toFixed(0)}° · 🔔 ×${rings}`;
+    `t ${simT.toFixed(1)}с · волны ${p.domFallen1}/${m.P.domN1} и ${p.domFallen2}/${m.P.domN2} · 🔔 ×${rings}`;
 }
 
 /* ---------- цикл: физика 120 Гц, рендер rAF ---------- */
 let running = false, paused = false, acc = 0, lastBell = 0;
 function frame(now) {
   requestAnimationFrame(frame);
-  const dt = Math.min((now - (frame.last || now)) / 1000, .1); frame.last = now;
+  const dt = Math.min((now - (frame.last || now)) / 1000, params.has("test") ? .5 : .1); frame.last = now;
   if (running && !paused) {
-    acc += dt;
+    // темп: в тест-режиме догоняем до 2× реального времени (rAF в софт-рендере
+    // может идти 4-14 fps — симуляция не должна от этого зависеть)
+    const pace = params.has("test") ? 2 : 1;
+    acc += dt * pace;
+    const cap = params.has("test") ? 240 : 30;
     let n = 0;
-    while (acc >= m.dt && n < 30) { m.step(); acc -= m.dt; n++; simT += m.dt; }
+    while (acc >= m.dt && n < cap) { m.step(); acc -= m.dt; n++; simT += m.dt; }
     pumpAudio();
-    const bellEv = m.events.filter(e => (e.a === "mallet" && e.b === "bell") || (e.a === "bell" && e.b === "mallet"));
+    const bellEv = m.events.filter(e => /mallet2?/.test(e.a + e.b) && /bell/.test(e.a + e.b));
     if (bellEv.length > lastBell) {
       rings += bellEv.length - lastBell;
       lastEvent = `🔔 ЗВОНОК №${rings}`;
       lastBell = bellEv.length;
     }
-    if (simT > 3 && m.probe().allRest) {
+    // авто-стоп: только после звона (в длинной цепочке медленные фазы дают
+    // ложный покой: волна ползёт 0.02 м/с — это не конец)
+    if (rings > 0 && simT > 3 && m.probe().allRest) {
       running = false;
-      lastEvent = `опыт завершён: 🔔 ×${rings}, всё утихло`;
+      lastEvent = `опыт завершён: 🔔 ×${rings} на ${simT.toFixed(0)}-й секунде`;
     }
+    if (simT > 90) { running = false; lastEvent = "останов по таймауту"; }
   }
   for (const [b, g] of groupOf) {
     g.position.copy(b.position);
@@ -357,11 +370,13 @@ function frame(now) {
   if (params.has("test")) {
     const p = m.probe();
     window.__test = {
-      t: +simT.toFixed(2), rings, dominoes: p.domFallen,
-      bellHits: m.events.filter(e => /mallet/.test(e.a + e.b) && /bell/.test(e.a + e.b)).length,
-      firstBellT: p.firstBellT, sane: p.sane, allRest: p.allRest,
+      t: +simT.toFixed(2), rings,
+      wave1: p.domFallen1, wave2: p.domFallen2,
+      ball2x: +p.ball2.p[0].toFixed(2),
+      bellHits: p.bellHits, firstBellT: p.firstBellT,
+      sane: p.sane, allRest: p.allRest,
     };
-    document.title = `TEST t=${simT.toFixed(1)} r=${rings} d=${p.domFallen}`;
+    document.title = `TEST t=${simT.toFixed(1)} r=${rings} w${p.domFallen1}+${p.domFallen2}`;
   }
 }
 requestAnimationFrame(frame);

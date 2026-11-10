@@ -45,10 +45,10 @@ const check = (name, cond, extra = "") =>
   }));
 
   // автозапуск до звона
-  await page.waitForFunction(() => window.__test && (window.__test.t >= 8 || window.__test.allRest), null, { timeout: 90000 });
+  await page.waitForFunction(() => window.__test && window.__test.rings > 0, null, { timeout: 240000 });
   const t1 = await page.evaluate(() => window.__test);
   check("опыт дошёл до звона", t1.rings > 0 && t1.bellHits > 0, t1);
-  check("волна упала вся", t1.dominoes === 6, t1);
+  check("волны упали (8+10)", t1.wave1 === 8 && t1.wave2 === 10, t1);
 
   // пауза/продолжение
   await page.keyboard.press(" ");
@@ -64,14 +64,19 @@ const check = (name, cond, extra = "") =>
   await page.keyboard.press("r");
   await page.waitForTimeout(200);
   const t4 = await page.evaluate(() => window.__test);
-  check("сброс восстановил сцену", t4.rings === 0 && t4.dominoes === 0, t4);
+  check("сброс восстановил сцену", t4.rings === 0 && t4.wave1 === 0 && t4.wave2 === 0, t4);
 
   // скриншоты для VLM: idle и момент звона (ждать события, не таймер)
   await page.goto("http://127.0.0.1:8903/?test=1", { waitUntil: "load" });
-  await page.waitForTimeout(1800);
+  await page.waitForTimeout(2200);
   await page.screenshot({ path: "/home/z/my-project/work/smoke_idle.png" });
   await page.click("#btnRun");
-  await page.waitForFunction(() => window.__test && window.__test.rings > 0, null, { timeout: 60000 });
+  // фазовые скриншоты: жёлоб (t~9с), волна② в разгаре (t~26), звон
+  await page.waitForFunction(() => window.__test && window.__test.t >= 9, null, { timeout: 90000 });
+  await page.screenshot({ path: "/home/z/my-project/work/smoke_chute.png" });
+  await page.waitForFunction(() => window.__test && window.__test.wave2 >= 3, null, { timeout: 120000 });
+  await page.screenshot({ path: "/home/z/my-project/work/smoke_wave2.png" });
+  await page.waitForFunction(() => window.__test && window.__test.rings > 0, null, { timeout: 180000 });
   await page.screenshot({ path: "/home/z/my-project/work/smoke_ring.png" });
 
 

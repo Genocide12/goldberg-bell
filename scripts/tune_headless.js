@@ -1,51 +1,51 @@
-// Headless-прогон физики машины (cannon-es в Node, без браузера).
-// Печатает хореографию столкновений и зонды; оценивает цепочку.
-const CANNON = require("cannon-es");
+// Headless-прогон физики машины v4 (cannon-es в Node, без браузера).
+// Полная цепочка ~28с: горка → волна① 8 → молот① → шарик② → жёлоб 2.26 м →
+// волна② 10 → молот② → колокол.
+const CANNON = require("/home/z/my-project/site/vendor/cannon-es.global.js");
 const { buildMachine } = require("/home/z/my-project/site/machine.js");
 
 const RUNS = +(process.env.RUNS || 1);
-const TEND = +(process.env.TEND || 12);
+const TEND = +(process.env.TEND || 40);
 
-const byName4 = m => m.byName["dom4"].angularVelocity.length().toFixed(2);
 function oneRun(r) {
   const m = buildMachine(CANNON);
-  const seen = new Set();
-  let lastP = null;
+  let lastP = 0;
   while (m.t < TEND) {
-    m.step(10);                       // 10 шагов пакета
+    m.step(10);
     const p = m.probe();
-    for (const e of m.events)
-      if (!seen.has(e.t + e.a)) { seen.add(e.t + e.a); }
-    if (m.t > 2 && m.t < 6 && Math.abs((lastP || 0) - p.t) >= 0.25) {
-      console.log(`    dom3=${p.domAng[3]}° dom4=${p.domAng[4]}° dom5=${p.domAng[5]}° dom6=${p.domAng[6]}° w4=${byName4(m)}`);
-    }
-    if (!lastP || p.t - lastP >= 0.5) {
+    if (!lastP || p.t - lastP >= 2) {
       lastP = p.t;
-      console.log(`  t=${p.t.toFixed(1).padStart(5)} ball(${p.ball.p.map(v=>v.toFixed(2))}) v${p.ball.v}  dom>${50}:${p.domFallen}  mal${p.malletDeg}° bellTilt${p.bellTilt}°`);
+      console.log(`  t=${String(p.t.toFixed(0)).padStart(3)} ①${p.domFallen1}/${m.P.domN1} mal①${p.mallet1Deg}°  b2(${p.ball2.p.map(v=>v.toFixed(2))}) v${p.ball2.v}  ②${p.domFallen2}/${m.P.domN2} mal②${p.mallet2Deg}° 🔔×${p.bellHits}`);
     }
-    if (p.allRest && p.t > 2) break;
+    if (p.bellHits > 0) break;
   }
   const p = m.probe();
-  console.log("  --- события (первые 40):");
-  for (const e of m.events.slice(0, 120))
-    if (e.a.startsWith("dom") || e.b.startsWith("dom") || e.a==="glass" || e.b==="glass") console.log(`    t=${e.t.toFixed(2).padStart(6)} ${e.a}×${e.b} v=${e.v}`);
-  console.log("  --- финал:", JSON.stringify(p));
-  // v3: молот качается от волны, голова бьёт колокол
-  let domMallet = null, malletBell = null, maxMalletV = 0;
-  for (const e of m.events) {
-    const pr = [e.a, e.b].sort().join(",");
-    if (!domMallet && e.v > 0.05 && pr.includes("mallet") && /dom[0-9]/.test(pr)) domMallet = e;
-    if (pr === "bell,mallet") { if (!malletBell) malletBell = e; maxMalletV = Math.max(maxMalletV, e.v); }
-  }
-  console.log(`  фазы: волна→молот t=${domMallet ? domMallet.t : "-"} v=${domMallet ? domMallet.v : 0}; молот→колокол t=${malletBell ? malletBell.t : "-"} v=${malletBell ? malletBell.v : 0} (max ${maxMalletV})`);
+  const last1 = "dom" + (m.P.domN1 - 1), last2 = "dom" + (m.P.domN1 + m.P.domN2 - 1);
+  const find = re => m.events.find(e => re.test(e.a + "×" + e.b) && e.v > 0.02);
+  const phM1 = find(new RegExp(`mallet1.*${last1}|${last1}.*mallet1`));
+  const phB2 = find(/ball2.*mallet1|mallet1.*ball2/);
+  const phCh = m.events.find(e => /ball2/.test(e.a + e.b) && /chuteFloor/.test(e.a + e.b) && e.v > 0.1);
+  const phD8 = find(new RegExp(`ball2.*dom${m.P.domN1}|dom${m.P.domN1}.*ball2`));
+  const phM2 = find(new RegExp(`mallet2.*${last2}|${last2}.*mallet2`));
+  const phBell = m.events.find(e => /mallet2/.test(e.a + e.b) && /bell/.test(e.a + e.b) && e.v > 0.05);
+  console.log("  фазы:",
+    `дом(посл①)→молот① ${phM1 ? phM1.t + " v" + phM1.v : "—"};`,
+    `молот①→шар② ${phB2 ? phB2.t + " v" + phB2.v : "—"};`,
+    `шар②→жёлоб ${phCh ? phCh.t : "—"};`,
+    `шар②→дом8 ${phD8 ? phD8.t + " v" + phD8.v : "—"};`,
+    `дом(посл②)→молот② ${phM2 ? phM2.t + " v" + phM2.v : "—"};`,
+    `🔔 ${phBell ? phBell.t + " v" + phBell.v : "—"}`);
 
   const ok = [];
-  const ck = (name, cond, extra) => { ok.push([name, !!cond, extra]); };
-  ck("волна 6/6", p.domFallen === m.P.domN, p.domAng.join(","));
-  ck("волна качнула молот (v>0.05)", !!domMallet, domMallet ? `t=${domMallet.t} v=${domMallet.v}` : "нет");
-  ck("молот бил в колокол", p.bellHits >= 1, "hits=" + p.bellHits);
-  ck("первый удар по колоколу < 10с", p.firstBellT > 0 && p.firstBellT < 10, "t=" + p.firstBellT);
-  ck("всё успокоилось", p.allRest, "");
+  const ck = (name, cond, extra) => ok.push([name, !!cond, extra]);
+  ck("волна① вся", p.domFallen1 === m.P.domN1, p.domAng1.join(","));
+  ck("волна② вся", p.domFallen2 === m.P.domN2, p.domAng2.join(","));
+  ck("молот① качнулся", !!phM1, "");
+  ck("шарик② запущен молотом①", !!phB2 && phB2.v > 0.3, phB2 ? "v=" + phB2.v : "нет");
+  ck("шарик② дошёл до волны②", !!phD8 && phD8.v > 0.5, phD8 ? "v=" + phD8.v : "нет");
+  ck("молот② качнулся", !!phM2, "");
+  ck("ЗВОНА", p.bellHits >= 1, "hits=" + p.bellHits);
+  ck("звон в 22-35с", p.firstBellT > 22 && p.firstBellT < 35, "t=" + p.firstBellT);
   ck("сана", p.sane, "");
   const fails = ok.filter(x => !x[1]);
   console.log(`  run#${r}: ${ok.length - fails.length}/${ok.length}` + (fails.length ? "  FAIL: " + fails.map(f => f[0]).join("; ") : "  ALL OK"));

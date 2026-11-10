@@ -1,5 +1,5 @@
 // Бенчмарк домино-волны в cannon-es: 5 плашек, стартовый удар, замер передачи.
-const CANNON = require("/home/z/node_modules/cannon-es");
+const CANNON = require("/home/z/my-project/site/vendor/cannon-es.global.js");
 
 function bench(opts) {
   const { step, frFoot, restFace, iters, domH, domT, domW, impulse } = opts;
