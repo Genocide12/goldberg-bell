@@ -12,7 +12,7 @@
 [![License: MIT](https://img.shields.io/badge/лицензия-MIT-4a86e8?style=flat-square)](LICENSE)
 [![Physics](https://img.shields.io/badge/физика-cannon--es_120Гц-c93a46?style=flat-square)](https://pmndrs.github.io/cannon-es/)
 
-**[▶ ЗАПУСТИТЬ ГОРОД ИЗ КАРТ (v7)](https://genocide12.github.io/goldberg-bell/index_v7.html)** ·
+**[▶ ЗАПУСТИТЬ ЗАМОК ИЗ КАРТ (v8)](https://genocide12.github.io/goldberg-bell/index_castle.html)** ·
 **[▶ Шоу с колоколом (v6)](https://genocide12.github.io/goldberg-bell/index_v6.html)** ·
 **[Лендинг-хаб со всеми эпохами](https://genocide12.github.io/goldberg-bell/)**
 
@@ -41,7 +41,8 @@
 
 | Версия | Код | Движок | Живая копия | Релиз |
 |---|---|---|---|---|
-| **v7.0.0** | **Город из карт** (текущая) | cannon-es 120 Гц | [index_v7.html](https://genocide12.github.io/goldberg-bell/index_v7.html) | [v7.0.0](https://github.com/Genocide12/goldberg-bell/releases/tag/v7.0.0) |
+| **v8.0.0** | **ЗАМОК-КОЛЬЦО** (текущая) | cannon-es 120 Гц + PiP-камера | [index_castle.html](https://genocide12.github.io/goldberg-bell/index_castle.html) | [v8.0.0](https://github.com/Genocide12/goldberg-bell/releases/tag/v8.0.0) |
+| v7.0.0 | Город из карт | cannon-es 120 Гц | [index_v7.html](https://genocide12.github.io/goldberg-bell/index_v7.html) | [v7.0.0](https://github.com/Genocide12/goldberg-bell/releases/tag/v7.0.0) |
 | v6.0.0 | Шоу с колоколом | cannon-es 120 Гц | [index_v6.html](https://genocide12.github.io/goldberg-bell/index_v6.html) | [v6.0.0](https://github.com/Genocide12/goldberg-bell/releases/tag/v6.0.0) |
 | v5.0.0 | Реальные домино | cannon-es | [history/v5](https://genocide12.github.io/goldberg-bell/history/v5/index.html) | [v5.0.0](https://github.com/Genocide12/goldberg-bell/releases/tag/v5.0.0) |
 | v4.0.0 | Rapier + PBR | Rapier WASM | [history/v4](https://genocide12.github.io/goldberg-bell/history/v4/index.html) | [v4.0.0](https://github.com/Genocide12/goldberg-bell/releases/tag/v4.0.0) |

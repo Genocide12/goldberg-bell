@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Замок из карт — машина Голдберга · кинематографичное падение</title>
+<meta name="description" content="Огромный замок-кольцо из 382 игральных карт: волна ломает стены по кругу, башни рушатся ярусами сверху вниз, король пал. Честная физика cannon-es, кинематографичная камера с картинка-в-картинке.">
+<meta property="og:title" content="Замок из карт — кинематографичное падение">
+<meta property="og:description" content="382 карты: кольцо стен, 4 башни, донжон. Волна заворачивает за угол, башни рушатся сверху вниз, король пал.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://genocide12.github.io/goldberg-bell/assets/banner.png">
+<link rel="icon" type="image/png" href="assets/icon32.png">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; background: #0b0c14;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  #scene { position: fixed; inset: 0; display: block; }
+
+  /* ---------- HUD ---------- */
+  .hud { position: fixed; z-index: 10; color: #e8e6dd; user-select: none; }
+  #topbar { top: 0; left: 0; right: 0; padding: 18px 24px; display: flex;
+    justify-content: space-between; align-items: flex-start; pointer-events: none; }
+  .title { font-size: 15px; font-weight: 800; letter-spacing: .14em; color: #ffcd5c;
+    text-transform: uppercase; }
+  .subtitle { font-size: 12px; color: #9aa3b8; margin-top: 4px; }
+  #phase { text-align: right; }
+  #phaseName { font-size: 17px; font-weight: 800; }
+  #clock { font-size: 12px; color: #9aa3b8; font-variant-numeric: tabular-nums; margin-top: 3px; }
+  #progress { position: fixed; left: 0; right: 0; bottom: 0; height: 4px;
+    background: #ffffff14; z-index: 11; }
+  #progressFill { height: 100%; width: 0%;
+    background: linear-gradient(90deg, #ffcd5c, #e8a92e); transition: width .2s; }
+
+  /* большая кнопка запуска */
+  #go { left: 50%; top: 66%; transform: translate(-50%, -50%); text-align: center;
+    pointer-events: auto; }
+  #goBtn { background: linear-gradient(135deg, #ffd76e, #e8a92e); color: #231a05;
+    border: none; font-size: 20px; font-weight: 800; padding: 18px 42px;
+    border-radius: 16px; cursor: pointer; box-shadow: 0 14px 44px -10px #e8a92eaa;
+    transition: transform .15s; letter-spacing: .02em; }
+  #goBtn:hover { transform: scale(1.05); }
+  #goHint { color: #9aa3b8; font-size: 13px; margin-top: 14px; text-shadow: 0 1px 6px #000; }
+  #goTitle { font-size: 30px; font-weight: 900; color: #fff; margin-bottom: 18px;
+    text-shadow: 0 2px 18px #000a; }
+
+  /* нижняя панель управления */
+  #controls { bottom: 18px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 10px; pointer-events: auto; }
+  .ctl { background: #ffffff12; border: 1px solid #ffffff22; color: #e8e6dd;
+    font-size: 13px; font-weight: 600; padding: 9px 16px; border-radius: 12px;
+    cursor: pointer; backdrop-filter: blur(8px); transition: .15s; }
+  .ctl:hover { background: #ffffff24; }
+  .ctl.active { background: #ffcd5c; color: #231a05; border-color: #ffcd5c; }
+
+  /* PiP-окна */
+  #pips { right: 20px; bottom: 64px; display: flex; flex-direction: column; gap: 10px;
+    pointer-events: none; }
+  .pip { border: 1px solid #ffcd5c66; border-radius: 10px; overflow: hidden;
+    box-shadow: 0 8px 30px -8px #000c; background: #000; position: relative; }
+  .pip canvas { display: block; }
+  .pip .lbl { position: absolute; left: 8px; top: 6px; font-size: 10px; font-weight: 800;
+    letter-spacing: .08em; color: #ffcd5c; text-shadow: 0 1px 4px #000; }
+
+  /* финальный баннер */
+  #finale { left: 50%; top: 42%; transform: translate(-50%, -50%) scale(.8);
+    opacity: 0; transition: all .6s cubic-bezier(.2,.8,.2,1); text-align: center;
+    pointer-events: none; }
+  #finale.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  #finaleCrown { font-size: 64px; filter: drop-shadow(0 6px 24px #ffcd5c88); }
+  #finaleText { font-size: 46px; font-weight: 900; color: #ffcd5c; margin-top: 6px;
+    letter-spacing: .04em; text-shadow: 0 4px 30px #ffcd5c55; }
+  #finaleSub { color: #cfd6e4; font-size: 15px; margin-top: 10px; }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<div class="hud" id="topbar">
+  <div>
+    <div class="title">Замок из карт · машина Голдберга</div>
+    <div class="subtitle">382 карты · cannon-es 120 Гц · волна по кольцу → башни → донжон → король</div>
+  </div>
+  <div id="phase">
+    <div id="phaseName">Ожидание</div>
+    <div id="clock">t = 0.00 c</div>
+  </div>
+</div>
+
+<div class="hud" id="go">
+  <div id="goTitle">ЗАМОК ИЗ КАРТ</div>
+  <button id="goBtn">▶ Запустить падение</button>
+  <div id="goHint">Замок стоит на честной физике — щёлкните, чтобы запустить волну</div>
+</div>
+
+<div class="hud" id="controls" style="display:none">
+  <button class="ctl" id="btnReset">⟲ Ещё раз</button>
+  <button class="ctl active" id="btnCam">🎥 Кино-камера</button>
+  <button class="ctl" id="btnFree">🖱 Свободный вид</button>
+  <button class="ctl" id="btnSlow">🐢 Замедление ×0.3</button>
+</div>
+
+<div class="hud" id="pips"></div>
+
+<div class="hud" id="finale">
+  <div id="finaleCrown">👑</div>
+  <div id="finaleText">КОРОЛЬ ПАЛ</div>
+  <div id="finaleSub">Замок рухнул за <span id="finaleT">—</span> с</div>
+</div>
+
+<div id="progress"><div id="progressFill"></div></div>
+
+<script src="vendor/cannon-es.global.js"></script>
+<script src="vendor/three.core.global.js"></script>
+<script src="vendor/three.global.js"></script>
+<script src="vendor/orbit.global.js"></script>
+<script>
+/* =====================================================================
+   ЗАМОК ИЗ КАРТ v8 — кинематографичное падение.
+   Физика: cards_core (встроен ниже, тот же что в headless-тесте).
+   Рендер: InstancedMesh (1 draw call на сторону карты), PBR, стабильные
+   тени (обновление shadow-карты каждый кадр — без мерцания).
+   Камера-режиссёр: общий кадр всего замка + PiP-окна активных зон
+   (до 3), плавные лерп-перелёты, финальный отъезд на руины.
+   ===================================================================== */
+
+/* ---------- физ-ядро (копия cards_core.js, браузерный экспорт) ---------- */
+const CARD = { L: 0.088, W: 0.063, T: 0.0006 };
+const MASS = +(CARD.L * CARD.W * CARD.T * 920).toFixed(5);
+const HZ = 120, DT = 1 / HZ;
+const HOUSE = { H: CARD.W, s: 0.028 };
+const HL = Math.sqrt(HOUSE.H ** 2 - HOUSE.s ** 2);
+const AL = Math.atan2(HOUSE.s, HL);
+const HOUSE_H = HL + CARD.T;
+
+class CardsCore {
+  constructor() {
+    const CE = window.CANNON;
+    this.world = new CE.World({ gravity: new CE.Vec3(0, -9.81, 0) });
+    this.world.broadphase = new CE.SAPBroadphase(this.world);
+    this.world.allowSleep = false;
+    this.world.solver.iterations = 20;
+    this.matC = new CE.Material('card');
+    this.matW = new CE.Material('ground');
+    const eq = { contactEquationStiffness: 1e8, contactEquationRelaxation: 2 };
+    this.world.addContactMaterial(new CE.ContactMaterial(this.matC, this.matC,
+      { friction: 0.30, restitution: 0.02, ...eq }));
+    this.world.addContactMaterial(new CE.ContactMaterial(this.matC, this.matW,
+      { friction: 0.45, restitution: 0.05, ...eq }));
+    const floor = new CE.Body({ mass: 0, material: this.matW });
+    floor.addShape(new CE.Box(new CE.Vec3(3, 0.05, 3)));
+    floor.position.set(0, -0.05, 0);
+    this.world.addBody(floor);
+    this.bodies = []; this.meta = new Map(); this.byName = {};
+    this.events = []; this.t0 = null;
+    this.buildCastle(); this._wire();
+  }
+  _addCard(name, kind, half, pos, rotZ = 0, rotY = 0, meta = {}) {
+    const CE = window.CANNON;
+    const b = new CE.Body({ mass: MASS, material: this.matC, allowSleep: true,
+      sleepSpeedLimit: 0.04, sleepTimeLimit: 0.35,
+      angularDamping: 0.03, linearDamping: 0.01 });
+    b.addShape(new CE.Box(half));
+    b.position.set(...pos);
+    if (rotY) { const q = new CE.Quaternion(); q.setFromAxisAngle(new CE.Vec3(0, 1, 0), rotY); b.quaternion.copy(q); }
+    if (rotZ) { const q = new CE.Quaternion(); q.setFromAxisAngle(new CE.Vec3(0, 0, 1), rotZ); b.quaternion.mult(q, b.quaternion); }
+    this.world.addBody(b); b.sleep();
+    this.bodies.push(b); this.byName[name] = b;
+    this.meta.set(b.id, { kind, name, ...meta });
+    return b;
+  }
+  _halfLean() { return new CANNON.Vec3(CARD.T / 2, HOUSE.H / 2, CARD.L / 2); }
+  _halfDeck() { return new CANNON.Vec3(CARD.L / 2, CARD.T / 2, CARD.W / 2); }
+  _halfStand() { return new CANNON.Vec3(CARD.T / 2, CARD.W / 2, CARD.L / 2); }
+  _halfTall() { return new CANNON.Vec3(CARD.T / 2, CARD.L / 2, CARD.W / 2); }
+  houseAt(name, x, y0, z, rotY, meta = {}) {
+    const c = Math.cos(rotY), s = Math.sin(rotY);
+    const W2W = (lx, ly) => [x + lx * c, y0 + ly, z - lx * s];
+    this._addCard(name + 'L', 'lean', this._halfLean(), W2W(-HOUSE.s / 2, HL / 2), AL, rotY, meta);
+    this._addCard(name + 'R', 'lean', this._halfLean(), W2W(HOUSE.s / 2, HL / 2), -AL, rotY, meta);
+    this._addCard(name + 'D', 'deck', this._halfDeck(), W2W(0, HL + CARD.T / 2 + 0.0002), 0, rotY, meta);
+    return y0 + HOUSE_H + 0.0002;
+  }
+  merlonAt(name, x, y0, z, rotY, meta = {}) {
+    this._addCard(name, 'stand', this._halfStand(), [x, y0 + CARD.W / 2, z], 0, rotY, meta);
+  }
+  _bridge(prefix, x0, z0, x1, z1, meta) {
+    const dx = x1 - x0, dz = z1 - z0;
+    const len = Math.hypot(dx, dz);
+    const n = Math.max(1, Math.round(len / 0.052));
+    const ux = dx / len, uz = dz / len;
+    const yaw = Math.atan2(uz, ux);
+    for (let m = 0; m < n; m++) {
+      const s = (m + 0.5) * (len / n);
+      this.houseAt(prefix + m + '_', x0 + ux * s, 0, z0 + uz * s, yaw, meta);
+    }
+    return n;
+  }
+  buildCastle() {
+    const R = 0.45, ARC = 300 * Math.PI / 180, A0 = -Math.PI / 2;
+    this.ring = { R, ARC, A0 };
+    const N_WALL = Math.round(R * ARC / 0.053);
+    for (let i = 0; i < N_WALL; i++) {
+      const a = A0 + (i / (N_WALL - 1)) * ARC;
+      const x = Math.cos(a) * R, z = Math.sin(a) * R;
+      const rotY = -a - Math.PI / 2;
+      const top = this.houseAt('w' + i + '_', x, 0, z, rotY, { kind: 'wall', seg: i, tier: 0 });
+      if (i % 4 === 0) {
+        const mx = Math.cos(a) * (R + 0.052), mz = Math.sin(a) * (R + 0.052);
+        this.merlonAt('wm' + i, mx, top - 0.0002, mz, rotY, { kind: 'wall', seg: i, tier: 1 });
+      }
+    }
+    this.towers = [];
+    const rOut = R + 0.16;
+    const gapA0 = A0 + ARC, gapA1 = A0 + 2 * Math.PI;
+    for (let t = 0; t < 4; t++) {
+      const a = gapA0 + 0.10 + t * ((gapA1 - gapA0 - 0.20) / 3);
+      const bx = Math.cos(a) * rOut, bz = Math.sin(a) * rOut;
+      const seg = 100 + t;
+      this.towers.push({ a, x: bx, z: bz, seg, tiers: [] });
+      let top = 0;
+      for (let lvl = 0; lvl < 4; lvl++) {
+        const rot = -a - Math.PI / 2;
+        top = this.houseAt('t' + t + '_' + lvl + 'a_', bx, top, bz, rot, { kind: 'tower', seg, tier: lvl });
+        this.houseAt('t' + t + '_' + lvl + 'b_', bx, top - HOUSE_H - 0.0004 + CARD.T, bz, rot + Math.PI / 2, { kind: 'tower', seg, tier: lvl });
+        this.towers[t].tiers.push(top);
+      }
+      this._addCard('t' + t + 'spire', 'tall', this._halfTall(),
+        [bx, this.towers[t].tiers[3] + CARD.L / 2 + 0.0004, bz], 0, -a,
+        { kind: 'tower', seg, tier: 4, role: 'spire' });
+      if (t > 0) {
+        const prev = this.towers[t - 1];
+        const sx = prev.x + (bx - prev.x) * 0.12, sz = prev.z + (bz - prev.z) * 0.12;
+        this._bridge('t' + t + 'm_', sx, sz, bx, bz, { kind: 'bridge', seg, tier: 0 });
+      }
+    }
+    let top = 0;
+    const D = 0.13;
+    this.keepTiers = [];
+    for (let lvl = 0; lvl < 6; lvl++) {
+      const rr = D * (1 - lvl * 0.10);
+      for (let k = 0; k < 4; k++) {
+        const aa = k * Math.PI / 2 + Math.PI / 4;
+        const ox = Math.cos(aa) * rr, oz = Math.sin(aa) * rr;
+        top = Math.max(top, this.houseAt('k' + lvl + '_' + k + '_', ox, lvl * (HOUSE_H + 0.0004), oz, aa + Math.PI / 2,
+          { kind: 'keep', seg: 200, tier: lvl }));
+      }
+      this.keepTiers.push(lvl * (HOUSE_H + 0.0004) + HOUSE_H);
+    }
+    const kTop = this.keepTiers[5];
+    this.king = this._addCard('king', 'tall', this._halfTall(),
+      [0, kTop + CARD.L / 2 + 0.0006, 0], 0, 0,
+      { kind: 'keep', seg: 200, tier: 6, role: 'king' });
+    const t0 = this.towers[0];
+    const kNear = { x: Math.cos(Math.PI / 4) * D, z: Math.sin(Math.PI / 4) * D };
+    const away = { x: t0.x - (t0.x / Math.hypot(t0.x, t0.z)) * 0.05,
+                   z: t0.z - (t0.z / Math.hypot(t0.x, t0.z)) * 0.05 };
+    this._bridge('kb_', away.x, away.z, kNear.x * 1.1, kNear.z * 1.1, { kind: 'bridge', seg: 300, tier: 0 });
+    const aT = A0 + 0.045;
+    const rT = R - 0.058;
+    this.trigger = this._addCard('trigger', 'tall', this._halfTall(),
+      [Math.cos(aT) * rT, CARD.L / 2, Math.sin(aT) * rT], 0, -aT + Math.PI / 2,
+      { kind: 'trigger', seg: -1, tier: 0 });
+  }
+  _wire() {
+    this.world.addEventListener('beginContact', (ev) => {
+      const { bodyA, bodyB } = ev;
+      if (bodyA.sleepState === 2 && this.meta.has(bodyA.id)) bodyA.wakeUp();
+      if (bodyB.sleepState === 2 && this.meta.has(bodyB.id)) bodyB.wakeUp();
+    });
+  }
+  start() {
+    if (this.t0 !== null) return;
+    this.t0 = 0;
+    const a0 = this.ring.A0;
+    this.trigger.wakeUp();
+    const tang = new CANNON.Vec3(-Math.sin(a0), 0, Math.cos(a0));
+    this.trigger.angularVelocity.set(tang.x * 9, 0, tang.z * 9);
+    this.events.push({ t: 0, msg: 'СТАРТ' });
+  }
+  step() {
+    this.world.step(DT);
+    if (this.t0 !== null) this.t0 += DT;
+    const movers = [];
+    for (const b of this.bodies) {
+      if (b.sleepState !== 2 && b.velocity.lengthSquared() > 0.25) movers.push(b);
+    }
+    if (movers.length) {
+      const r2 = 0.045 * 0.045;
+      for (const b of this.bodies) {
+        if (b.sleepState !== 2) continue;
+        for (const m of movers) {
+          const dx = b.position.x - m.position.x, dy = b.position.y - m.position.y,
+                dz = b.position.z - m.position.z;
+          if (dx * dx + dy * dy + dz * dz < r2) { b.wakeUp(); break; }
+        }
+      }
+    }
+    {
+      const activeTiers = new Set();
+      for (const b of this.bodies) {
+        if (b.sleepState === 2) continue;
+        const md = this.meta.get(b.id);
+        if (md && (md.kind === 'tower' || md.kind === 'keep'))
+          activeTiers.add(md.kind + ':' + md.seg + ':' + md.tier);
+      }
+      if (activeTiers.size) {
+        for (const b of this.bodies) {
+          if (b.sleepState !== 2) continue;
+          const md = this.meta.get(b.id);
+          if (!md || (md.kind !== 'tower' && md.kind !== 'keep')) continue;
+          const key = md.kind + ':' + md.seg + ':';
+          if (md.tier > 0 && activeTiers.has(key + (md.tier - 1))) b.wakeUp();
+        }
+      }
+    }
+  }
+  stats() {
+    let awake = 0, fallen = 0, standing = 0;
+    const segs = new Set();
+    const up = new CANNON.Vec3(0, 1, 0), tmp = new CANNON.Vec3();
+    for (const b of this.bodies) {
+      const md = this.meta.get(b.id);
+      if (!md || md.kind === 'trigger') continue;
+      if (b.sleepState !== 2 && b.velocity.lengthSquared() > 0.04) {
+        awake++; segs.add(md.kind[0] + (md.kind === 'tower' ? md.seg - 100 : md.seg));
+      }
+      b.quaternion.vmult(up, tmp);
+      if (tmp.y < 0.72) fallen++; else standing++;
+    }
+    return { awake, fallen, standing, total: this.bodies.length - 1, segs: [...segs] };
+  }
+  kingFallen() {
+    const tmp = new CANNON.Vec3();
+    this.king.quaternion.vmult(new CANNON.Vec3(0, 1, 0), tmp);
+    return tmp.y < 0.72 || this.king.position.y < 0.03;
+  }
+}
+
+/* ================== РЕНДЕР ================== */
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('scene'),
+  antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = true;            // стабильные тени: без мерцания
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.12;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0c14);
+scene.fog = new THREE.Fog(0x0b0c14, 3.2, 7.5);
+
+const camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.01, 60);
+camera.position.set(1.35, 0.95, 1.5);
+
+/* ---------- свет: тёплый ключевой + холодная заливка + обруч ---------- */
+const key = new THREE.DirectionalLight(0xffe7c2, 2.6);
+key.position.set(1.6, 2.6, 1.1);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.left = -1.2; key.shadow.camera.right = 1.2;
+key.shadow.camera.top = 1.2; key.shadow.camera.bottom = -1.2;
+key.shadow.camera.near = 0.5; key.shadow.camera.far = 7;
+key.shadow.bias = -0.0004; key.shadow.normalBias = 0.02;
+scene.add(key);
+scene.add(new THREE.HemisphereLight(0x3a4a6a, 0x141216, 0.85));
+const rim = new THREE.DirectionalLight(0x6a86ff, 0.9);
+rim.position.set(-2.0, 1.2, -1.4);
+scene.add(rim);
+
+/* ---------- окружение: стол-веранда ---------- */
+const table = new THREE.Mesh(
+  new THREE.CylinderGeometry(1.55, 1.55, 0.06, 72),
+  new THREE.MeshStandardMaterial({ color: 0x4a3626, roughness: 0.82, metalness: 0.03 }));
+table.position.y = -0.031;
+table.receiveShadow = true;
+scene.add(table);
+const felt = new THREE.Mesh(
+  new THREE.CylinderGeometry(1.5, 1.5, 0.005, 72),
+  new THREE.MeshStandardMaterial({ color: 0x1d4a34, roughness: 0.98 }));
+felt.position.y = 0.0005; felt.receiveShadow = true;
+scene.add(felt);
+
+/* ---------- текстуры карт (canvas): рубашка и 2 лицевых ---------- */
+function makeCardTexture(mode) {
+  const cv = document.createElement('canvas');
+  cv.width = 256; cv.height = 180;
+  const g = cv.getContext('2d');
+  if (mode === 'back') {
+    const grd = g.createLinearGradient(0, 0, 256, 180);
+    grd.addColorStop(0, '#a82430'); grd.addColorStop(1, '#7d1a24');
+    g.fillStyle = grd; g.fillRect(0, 0, 256, 180);
+    g.strokeStyle = '#ffffff2e'; g.lineWidth = 2;
+    for (let i = -180; i < 256; i += 16) {
+      g.beginPath(); g.moveTo(i, 0); g.lineTo(i + 180, 180); g.stroke();
+      g.beginPath(); g.moveTo(i, 180); g.lineTo(i + 180, 0); g.stroke();
+    }
+    g.strokeStyle = '#ffffff55'; g.lineWidth = 5;
+    g.strokeRect(9, 9, 238, 162);
+  } else {
+    g.fillStyle = '#f6f3ea'; g.fillRect(0, 0, 256, 180);
+    const suits = ['♠', '♥', '♦', '♣'], ranks = ['A', 'K', 'Q', 'J', '10', '9'];
+    const suit = suits[(mode * 7) % 4], rank = ranks[(mode * 5) % 6];
+    const red = suit === '♥' || suit === '♦';
+    g.fillStyle = red ? '#c92030' : '#1c1c28';
+    g.font = 'bold 44px Georgia'; g.fillText(rank, 12, 46);
+    g.font = '34px Georgia'; g.fillText(suit, 16, 84);
+    g.font = '64px Georgia'; g.textAlign = 'center';
+    g.fillText(suit, 128, 128);
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  return tex;
+}
+const texBack = makeCardTexture('back');
+const texFace1 = makeCardTexture(1);
+const texFace2 = makeCardTexture(2);
+
+/* ---------- инстансы карт: 3 материала (рубашка + 2 лицевых) ----------
+   Каждая карта — BoxGeometry; лицевая текстура на обеих больших гранях.
+   InstancedMesh → 3 draw call на 382 карты → 60 FPS. */
+const core = new CardsCore();
+const N = core.bodies.length;
+
+const cardGeo = new THREE.BoxGeometry(CARD.L, CARD.T, CARD.W);
+cardGeo.clearGroups();
+cardGeo.addGroup(0, 6, 0);          // все грани одним материалом
+const materials = [
+  new THREE.MeshStandardMaterial({ map: texBack, roughness: 0.6, metalness: 0.02 }),
+  new THREE.MeshStandardMaterial({ map: texFace1, roughness: 0.55, metalness: 0.02 }),
+  new THREE.MeshStandardMaterial({ map: texFace2, roughness: 0.55, metalness: 0.02 }),
+];
+// раскладка карт по материалам: рубашка/лицо случайно, детерминированно
+let seed = 42;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const matOf = new Array(N).fill(0).map(() => (rnd() < 0.55 ? 0 : (rnd() < 0.5 ? 1 : 2)));
+const counts = [0, 0, 0].map((_, i) => matOf.filter(m => m === i).length);
+
+const meshes = counts.map((cnt, i) => {
+  const im = new THREE.InstancedMesh(cardGeo, materials[i], cnt);
+  im.castShadow = true; im.receiveShadow = true;
+  im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  scene.add(im);
+  return im;
+});
+// индекс карты в её InstancedMesh
+const instIdx = new Array(N);
+{ const used = [0, 0, 0];
+  for (let i = 0; i < N; i++) instIdx[i] = used[matOf[i]]++; }
+
+const dummy = new THREE.Object3D();
+function syncInstances() {
+  for (let i = 0; i < N; i++) {
+    const b = core.bodies[i], im = meshes[matOf[i]];
+    dummy.position.copy(b.position);
+    dummy.quaternion.copy(b.quaternion);
+    dummy.updateMatrix();
+    im.setMatrixAt(instIdx[i], dummy.matrix);
+  }
+  for (const im of meshes) im.instanceMatrix.needsUpdate = true;
+}
+syncInstances();
+
+/* ================== КАМЕРА-РЕЖИССЁР ==================
+   Требования: летать/парить, приближать-отдалять, ОБЩИЙ масштаб при
+   нескольких зонах падения, PiP-окна на конкретные рушащиеся строения,
+   в конце — отъезд на общий кадр руин.
+   Реализация: список «активных зон» (кластеры бодрых карт). Основная
+   камера всегда видит ВЕСЬ замок (общий масштаб — центр масс замка,
+   дистанция по bounding box). PiP-камеры (до 2) наводятся на самый
+   активный кластер. Переходы — экспоненциальный сглаженный лерп. */
+const DIRECTOR = {
+  mode: 'idle',           // idle | run | finale
+  camMode: 'cine',        // cine | free
+  pos: new THREE.Vector3(1.35, 0.95, 1.5),
+  look: new THREE.Vector3(0, 0.15, 0),
+  targetPos: new THREE.Vector3(1.35, 0.95, 1.5),
+  targetLook: new THREE.Vector3(0, 0.15, 0),
+  orbitT: 0,              // фаза орбиты в cine
+  started: false,
+};
+const clock = new THREE.Clock();
+let physTime = 0, wallTime = 0;
+const SLOW = { on: true, k: 0.3 };
+let kingTime = null, finished = false;
+
+function activeZones() {
+  // кластеры бодрых карт: сегменты в движении → центры (x,z), радиус
+  const zones = [];
+  const cl = new Map();  // cluster key → {x,z,n}
+  for (const b of core.bodies) {
+    if (b.sleepState === 2 || b.velocity.lengthSquared() < 0.04) continue;
+    const md = core.meta.get(b.id);
+    if (!md || md.kind === 'trigger') continue;
+    const key = md.kind + (md.kind === 'tower' ? md.seg - 100 : md.kind === 'keep' ? '' : md.seg);
+    let c = cl.get(key);
+    if (!c) { c = { key, kind: md.kind, x: 0, z: 0, n: 0, y: 0 }; cl.set(key, c); }
+    c.x += b.position.x; c.z += b.position.z; c.y = Math.max(c.y, b.position.y); c.n++;
+  }
+  for (const c of cl.values()) { c.x /= c.n; c.z /= c.n; zones.push(c); }
+  zones.sort((a, b) => b.n - a.n);
+  return zones;
+}
+
+function directorUpdate(dt) {
+  const s = core.stats();
+  const zones = activeZones();
+
+  if (DIRECTOR.mode === 'run') {
+    // фаза для HUD
+    const names = { wall: 'Волна по стенам', tower: 'Башни рушатся', keep: 'Донжон!', bridge: 'Мостики' };
+    let ph = 'Волна по стенам';
+    if (zones.length) ph = names[zones[0].kind] || '…';
+    if (kingTime !== null) ph = 'Король пал!';
+    document.getElementById('phaseName').textContent = ph;
+    document.getElementById('progressFill').style.width =
+      Math.min(100, s.fallen / s.total * 100) + '%';
+
+    // главная камера: ОБЩИЙ масштаб — весь замок в кадре, медленная орбита
+    DIRECTOR.orbitT += dt * 0.10;
+    const R = 1.05 + (zones.length > 1 ? 0.18 : 0);   // дальше, если зон много
+    DIRECTOR.targetPos.set(
+      Math.cos(DIRECTOR.orbitT) * R, 0.85 + Math.sin(DIRECTOR.orbitT * 0.7) * 0.12,
+      Math.sin(DIRECTOR.orbitT) * R);
+    DIRECTOR.targetLook.set(0, 0.18, 0);
+
+    // PiP: до 2 самых активных зон — крупный план «то самое строение»
+    updatePips(zones.slice(0, 2));
+  } else if (DIRECTOR.mode === 'finale') {
+    DIRECTOR.orbitT += dt * 0.06;
+    const R = 1.5 - 0.2 * Math.min(1, (wallTime - kingTime) / 3);  // плавный наезд
+    DIRECTOR.targetPos.set(
+      Math.cos(DIRECTOR.orbitT) * R, 0.7, Math.sin(DIRECTOR.orbitT) * R);
+    DIRECTOR.targetLook.set(0, 0.05, 0);
+  }
+  // сглаживание (критично: независимая от FPS экспонента)
+  const k = 1 - Math.exp(-dt * 2.2);
+  DIRECTOR.pos.lerp(DIRECTOR.targetPos, k);
+  DIRECTOR.look.lerp(DIRECTOR.targetLook, k);
+  camera.position.copy(DIRECTOR.pos);
+  camera.lookAt(DIRECTOR.look);
+}
+
+/* ---------- PiP-окна ---------- */
+const pipsEl = document.getElementById('pips');
+const pips = [];
+function makePip() {
+  const el = document.createElement('div');
+  el.className = 'pip';
+  const cv = document.createElement('canvas');
+  cv.width = 240; cv.height = 150;
+  const lbl = document.createElement('div');
+  lbl.className = 'lbl';
+  el.appendChild(cv); el.appendChild(lbl);
+  el.style.display = 'none';               // скрыт до старта
+  pipsEl.appendChild(el);
+  // собственный маленький рендерер — честный вывод в этот canvas
+  const pr = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+  pr.setSize(240, 150, false);
+  pr.setPixelRatio(1);
+  pr.shadowMap.enabled = false;            // без теней — дёшево
+  pr.toneMapping = THREE.ACESFilmicToneMapping;
+  pr.toneMappingExposure = 1.12;
+  const cam = new THREE.PerspectiveCamera(50, 240 / 150, 0.01, 10);
+  return { el, cv, cam, lbl, renderer: pr };
+}
+for (let i = 0; i < 2; i++) pips.push(makePip());
+const pipNames = { wall: 'СТЕНА', tower: 'БАШНЯ', keep: 'ДОНЖОН', bridge: 'МОСТ' };
+
+function updatePips(zones) {
+  for (let i = 0; i < pips.length; i++) {
+    const p = pips[i];
+    if (!zones[i]) { p.el.style.display = 'none'; continue; }
+    p.el.style.display = 'block';
+    const z = zones[i];
+    p.lbl.textContent = (pipNames[z.kind] || 'ЗОНА') + (z.kind === 'tower' ? ' ' + z.key.slice(5) : '');
+    // камера смотрит на зону сверху-сбоку, лерп для плавности
+    const tx = z.x * 1.45, tz = z.z * 1.45;
+    if (!p.cam.userData.tx) { p.cam.userData.tx = tx; p.cam.userData.tz = tz; p.cam.userData.ly = 0.1; }
+    p.cam.userData.tx += (tx - p.cam.userData.tx) * 0.06;
+    p.cam.userData.tz += (tz - p.cam.userData.tz) * 0.06;
+    p.cam.position.set(p.cam.userData.tx, 0.34 + z.y * 0.35, p.cam.userData.tz);
+    p.cam.lookAt(z.x, z.y * 0.5, z.z);
+  }
+}
+function renderPips() {
+  for (const p of pips) {
+    if (p.el.style.display === 'none') continue;
+    p.renderer.render(scene, p.cam);       // мини-рендерер → свой canvas
+  }
+}
+
+/* ================== ЗВУК: шелест карт + финал ================== */
+let AC = null;
+function rustle(intensity) {
+  if (!AC) return;
+  const t = AC.currentTime;
+  // шумовой всплеск через buffer
+  const dur = 0.06 + Math.random() * 0.05;
+  const buf = AC.createBuffer(1, AC.sampleRate * dur, AC.sampleRate);
+  const ch = buf.getChannelData(0);
+  for (let i = 0; i < ch.length; i++)
+    ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / ch.length, 2.2);
+  const src = AC.createBufferSource(); src.buffer = buf;
+  const f = AC.createBiquadFilter(); f.type = 'bandpass';
+  f.frequency.value = 2600 + Math.random() * 2200; f.Q.value = 1.1;
+  const g = AC.createGain();
+  g.gain.value = Math.min(0.16, 0.03 + intensity * 0.012);
+  src.connect(f).connect(g).connect(AC.destination);
+  src.start(t);
+}
+function fanfare() {
+  if (!AC) return;
+  const t0 = AC.currentTime + 0.05;
+  [[392, 0], [523.25, 0.12], [659.25, 0.24], [783.99, 0.36]].forEach(([f, dt]) => {
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = 'triangle'; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, t0 + dt);
+    g.gain.exponentialRampToValueAtTime(0.12, t0 + dt + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + 0.9);
+    o.connect(g).connect(AC.destination);
+    o.start(t0 + dt); o.stop(t0 + dt + 1);
+  });
+}
+let lastRustle = 0;
+
+/* ================== UI ================== */
+const goEl = document.getElementById('go');
+document.getElementById('goBtn').addEventListener('click', () => {
+  if (!AC) { AC = new (window.AudioContext || window.webkitAudioContext)(); }
+  core.start();
+  DIRECTOR.mode = 'run';
+  DIRECTOR.orbitT = 0.95;   // начать с красивого ракурса
+  goEl.style.display = 'none';
+  document.getElementById('controls').style.display = 'flex';
+});
+document.getElementById('btnReset').addEventListener('click', () => location.reload());
+document.getElementById('btnCam').addEventListener('click', (e) => {
+  DIRECTOR.camMode = 'cine';
+  document.getElementById('btnCam').classList.add('active');
+  document.getElementById('btnFree').classList.remove('active');
+});
+document.getElementById('btnFree').addEventListener('click', (e) => {
+  DIRECTOR.camMode = 'free';
+  document.getElementById('btnFree').classList.add('active');
+  document.getElementById('btnCam').classList.remove('active');
+});
+document.getElementById('btnSlow').addEventListener('click', (e) => {
+  SLOW.on = !SLOW.on;
+  e.target.textContent = SLOW.on ? '🐢 Замедление ×0.3' : '⏩ Полная скорость';
+  e.target.classList.toggle('active', SLOW.on);
+});
+
+/* свободная орбита мышью */
+let freeOrbit = null;
+if (THREE.OrbitControls) {
+  freeOrbit = new THREE.OrbitControls(camera, renderer.domElement);
+  freeOrbit.enabled = false;
+  freeOrbit.target.set(0, 0.15, 0);
+  freeOrbit.enableDamping = true; freeOrbit.dampingFactor = 0.08;
+  freeOrbit.minDistance = 0.3; freeOrbit.maxDistance = 4;
+  freeOrbit.maxPolarAngle = Math.PI / 2 - 0.04;
+}
+
+/* ================== ГЛАВНЫЙ ЦИКЛ ==================
+   Физика: фикс-шаг 1/120 с аккумулятором; slow-motion — множитель dt.
+   Рендер: каждый кадр (RAF), тени обновляются всегда (без мерцания). */
+let acc = 0, fpsN = 0, fpsT = 0, fpsShow = 0;
+window.__fps = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  wallTime += dt;
+
+  if (DIRECTOR.mode === 'run' || DIRECTOR.mode === 'finale') {
+    acc += dt * (SLOW.on ? SLOW.k : 1);
+    let steps = 0;
+    while (acc >= DT && steps < 8) { core.step(); physTime += DT; acc -= DT; steps++; }
+    syncInstances();
+
+    // звук: шелест по числу бодрых карт (не чаще раза в 70 мс)
+    const s = core.stats();
+    if (s.awake > 0 && wallTime - lastRustle > 0.07) {
+      rustle(Math.min(14, s.awake)); lastRustle = wallTime;
+    }
+    if (kingTime === null && core.kingFallen()) {
+      kingTime = wallTime;
+      fanfare();
+      const fin = document.getElementById('finale');
+      document.getElementById('finaleT').textContent = physTime.toFixed(2);
+      fin.classList.add('show');
+      DIRECTOR.mode = 'finale';
+    }
+    document.getElementById('clock').textContent =
+      't = ' + physTime.toFixed(2) + ' с · упало ' + s.fallen + '/' + s.total;
+    if (DIRECTOR.mode === 'run' && s.awake === 0 && physTime > 1) {
+      // всё улеглось (король мог не пасть — не бывает, но на всякий)
+      DIRECTOR.mode = 'finale';
+      if (kingTime === null) kingTime = wallTime;
+    }
+  }
+
+  if (DIRECTOR.camMode === 'free' && freeOrbit) {
+    freeOrbit.update();
+  } else {
+    directorUpdate(dt);
+  }
+  renderer.setViewport(0, 0, innerWidth, innerHeight);
+  renderer.render(scene, camera);
+  renderPips();
+
+  // FPS + динамическое разрешение: при просадке снижаю пикс-ратио (без лагов)
+  fpsN++; fpsT += dt;
+  if (fpsT >= 0.5) {
+    window.__fps = fpsN / fpsT;
+    const f = window.__fps;
+    if (f < 34 && renderer.getPixelRatio() > 0.66) {
+      renderer.setPixelRatio(Math.max(0.66, renderer.getPixelRatio() - 0.17));
+      key.shadow.mapSize.set(1024, 1024); key.shadow.map && key.shadow.map.dispose();
+      key.shadow.map = null;
+    } else if (f > 55 && renderer.getPixelRatio() < Math.min(devicePixelRatio, 2)) {
+      renderer.setPixelRatio(Math.min(Math.min(devicePixelRatio, 2), renderer.getPixelRatio() + 0.17));
+    }
+    fpsN = 0; fpsT = 0; }
+}
+animate();
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+/* тест-хуки (headless) */
+window.__castle = core;
+window.__director = DIRECTOR;
+window.__started = () => DIRECTOR.mode !== 'idle';
+window.__kingFallen = () => kingTime !== null;
+window.__stats = () => core.stats();
+</script>
+</body>
+</html>
